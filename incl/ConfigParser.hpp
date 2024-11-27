@@ -3,18 +3,60 @@
 
 # include "webserv.h"
 
+class DefaultConfig{
+	private:
+		std::string id;
+		std::string value;
+	public:
+		DefaultConfig(std::string id, std::string value){
+			this->id = id;
+			this->value = value;
+		}
+		~DefaultConfig(){}
+		
+		std::string getId(){
+			return this->id;
+		}
+
+		std::string getValue(){
+			return this->value;
+		}
+};
+
+class LocationConfig{
+	private:
+		std::string id;
+		std::list<DefaultConfig> values;
+	public:
+		LocationConfig(std::string id){
+			this->id = id;
+		}
+
+		~LocationConfig(){}
+
+		std::string getId(){
+			return this->id;
+		}
+
+		void addValue(std::string id, std::string value){
+			DefaultConfig dc(id, value):
+
+			this->values.pushBack(dc);
+		}
+
+		std::list<DefaultConfig> getValues(){
+			return this->values;
+		}
+};
+
+
 class ConfigParser{
 	private:
-		std::map<std::string, std::string> configData;
-		std::string file;
+		std::list<DefaultConfig> defaultConfig;
+		std::list<LocationConfig> locationConfig;
 
 	public:
-		ConfigParser(std::string file);
-		~ConfigParser();
-
-		int parseFile();
-
-		std::map<std::string, std::string> getFileData() const;
+		
 };
 
 #endif
