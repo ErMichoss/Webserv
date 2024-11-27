@@ -3,60 +3,39 @@
 
 # include "webserv.h"
 
-class DefaultConfig{
-	private:
-		std::string id;
-		std::string value;
-	public:
-		DefaultConfig(std::string id, std::string value){
-			this->id = id;
-			this->value = value;
-		}
-		~DefaultConfig(){}
-		
-		std::string getId(){
-			return this->id;
-		}
-
-		std::string getValue(){
-			return this->value;
-		}
-};
-
-class LocationConfig{
-	private:
-		std::string id;
-		std::list<DefaultConfig> values;
-	public:
-		LocationConfig(std::string id){
-			this->id = id;
-		}
-
-		~LocationConfig(){}
-
-		std::string getId(){
-			return this->id;
-		}
-
-		void addValue(std::string id, std::string value){
-			DefaultConfig dc(id, value):
-
-			this->values.pushBack(dc);
-		}
-
-		std::list<DefaultConfig> getValues(){
-			return this->values;
-		}
-};
-
-
 class ConfigParser{
+	public:
+		//Structs
+		struct Location {
+        	std::string path;
+        	std::string root;
+        	std::string index;
+        	bool autoindex;
+        	std::string redirect_target;
+        	std::map<std::string, std::string> fastcgi_params;
+    	};
+
+    	struct Server {
+        	int port;
+        	std::string server_name;
+        	std::string root;
+        	std::vector<Location> locations;
+    	};
+	
 	private:
-		std::list<DefaultConfig> defaultConfig;
-		std::list<LocationConfig> locationConfig;
+		//Atributtes
+		std::vector<Server> servers;
 
 	public:
+		//public methods
 		
+	private:
+		//auxiliar methods
+		void trim(std::string& str) const {
+        	size_t first = str.find_first_not_of(" \t");
+        	size_t last = str.find_last_not_of(" \t");
+        	str = str.substr(first, (last - first + 1));
+    	}
 };
 
 #endif

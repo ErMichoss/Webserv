@@ -7,6 +7,7 @@
 # include <netinet/in.h>
 # include <unistd.h>
 # include <map>
+# include <vector>
 # include <fstream>
 
 #endif
