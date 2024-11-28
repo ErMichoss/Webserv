@@ -36,7 +36,13 @@ int ConfigParser::addServerConf(){
 						}
 					}
 					server.port = std::atoi(portNum.c_str());
-				} else if (line.substr(0, 11) == "server_name"){
+				} else if (line.substr(0, 4) == "host"){
+					if (this->checkColon(4, line))
+						return 1;
+					std::string host = line.substr(5);
+					this->trim(host);
+					server.host = host;
+				}else if (line.substr(0, 11) == "server_name"){
 					if (this->checkColon(11, line))
 						return 1;
 					std::string snValue = line.substr(12);
@@ -49,19 +55,53 @@ int ConfigParser::addServerConf(){
 					this->trim(rootValue);
 					server.root = rootValue;
 				}
-				/* else if (line.substr(0, 8) == "LOCATION"){
+				else if (line.substr(0, 8) == "LOCATION"){
 					Location location;
 
-					if (this->checkColon(9, line))
+					if (this->checkColon(8, line))
 						return 1;
-					path = line.substr(10, (line.length() - 10));
+					std::string path = line.substr(10, (line.length() - 10));
 					this->trim(path);
 					location.path = path;
 					while (std::getline(this->file, line)){
-						
-
+						this->trim(line);
+						if (line.substr(0, 6) == "SERVER" || line.substr(0, 8) == "LOCATION")
+							break;
+						if (line.substr(0, 4) == "root"){
+							if (this->checkColon(4, line))
+								return 1;
+							std::string root = line.substr(5);
+							this->trim(root);
+							location.root = root;
+						} else if (line.substr(0, 5) == "index") {
+							if (this->checkColon(5, line))
+								return 1;
+							std::string index = line.substr(6);
+							this->trim(index);
+							location.index = index;
+						} else if (line.substr(0, 9) == "autoindex"){
+							if (this->checkColon(9, line))
+								return 1;
+							std::string autoindex = line.substr(10);
+							this->trim(autoindex);
+							if (autoindex != "on" && autoindex != "off"){
+								std::cerr << "Error: Unexpected word " << autoindex << " on line: " << line << std::endl;
+								return 1;
+							} else if (autoindex == "on"){
+								location.autoindex = true;
+							} else {
+								location.autoindex = false;
+							}
+						} else if (line.substr(0, 15) == "redirect_target"){
+							if (this->checkColon(15, line))
+								return 1;
+							std::string redirect = line.substr(16);
+							this->trim(redirect);
+							location.redirect_target = redirect;
+						}
 					}
-				}*/
+					server.locations.push_back(location);
+				}
 			}
 		}
 		this->servers.push_back(server);

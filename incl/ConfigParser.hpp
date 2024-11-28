@@ -7,19 +7,22 @@ class ConfigParser{
 	public:
 		//Structs
 		struct Location {
-        	std::string path;
-        	std::string root;
-        	std::string index;
-        	bool autoindex;
-        	std::string redirect_target;
-        	std::map<std::string, std::string> fastcgi_params;
+        	std::string path = "/";
+        	std::string root = "";
+        	std::string index = "index.html";
+        	bool autoindex = false;
+        	std::string redirect_target = "";
+        	std::map<std::string, std::string> fastcgi_params = {};
     	};
 
     	struct Server {
-        	int port;
-        	std::string server_name;
-        	std::string root;
-        	std::vector<Location> locations;
+        	int port = 80;
+    		std::string host = "0.0.0.0";
+    		std::string server_name = "";
+    		std::string root = "/var/www/html";
+    		std::vector<Location> locations = {
+        		{"/", "/var/www/html", "index.html", false, "", {}}
+    		}; 
     	};
 	
 	private:

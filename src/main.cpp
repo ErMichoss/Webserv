@@ -11,6 +11,7 @@ int main(int argc, char *argv[]){
 		std::vector<ConfigParser::Server> servers = cp.getServers();
 		std::vector<ConfigParser::Server>::iterator it = servers.begin();
 		std::cout << servers.at(0).port << std::endl;
+		std::cout << servers.at(0).locations.at(0).root << std::endl;
 	} else {
 		std::cout << "Debes meter 1 archivo de configuración" << std::endl;
 		exit = 1;
