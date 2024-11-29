@@ -1,17 +1,17 @@
 #include "../incl/ConfigParser.hpp"
 
 /**
- * This is the constructor of the class that is gonna manage the configuration file.
- * @param[in] fileUrl The url of the config file
+ * @brief This is the constructor of the class that is gonna manage the configuration file.
+ * @param fileUrl The url of the config file
  */
-ConfigParser::ConfigParser(std::string fileUrl): file(fileUrl){
+ConfigParser::ConfigParser(char const* fileUrl): file(fileUrl){
 	if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file: " + fileUrl);
+        std::cerr << "Could not open file" << std::endl;
 	}
 }
 
 /**
- * This method is going to add a Server struct to the std::list<Server> of this class.
+ * @brief This method is going to add a Server struct to the std::list<Server> of this class.
  * @return returns 0 if everything went OK returns 1 if something went wrong.
  */
 int ConfigParser::addServerConf(){
@@ -30,12 +30,12 @@ int ConfigParser::addServerConf(){
 						return 1;
 					std::string portNum = line.substr(7);
 					this->trim(portNum);
-					for (char c : portNum){
-						if (!std::isdigit(c)){
+					for (int i = 0; i < std::strlen(portNum.c_str()); i++){
+						if (!std::isdigit(portNum.c_str()[i])){
 							std::cerr << "Error: Non-numeric port in 'listen' configuration" << portNum << std::endl;
 						}
 					}
-					server.port = std::atoi(portNum.c_str());
+					server.port = atoi(portNum.c_str());
 				} else if (line.substr(0, 4) == "host"){
 					if (this->checkColon(4, line))
 						return 1;

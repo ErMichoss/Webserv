@@ -7,22 +7,28 @@ class ConfigParser{
 	public:
 		//Structs
 		struct Location {
-        	std::string path = "/";
-        	std::string root = "";
-        	std::string index = "index.html";
-        	bool autoindex = false;
-        	std::string redirect_target = "";
-        	std::map<std::string, std::string> fastcgi_params = {};
+        	std::string path;
+        	std::string root;
+        	std::string index;
+        	bool autoindex;
+        	std::string redirect_target;
+        	std::map<std::string, std::string> fastcgi_params;
+
+			Location(const std::string& p = "/", const std::string& r = "", const std::string& i = "index.html",
+             bool a = false, const std::string& rt = "")
+        	: path(p), root(r), index(i), autoindex(a), redirect_target(rt) {}
     	};
 
     	struct Server {
-        	int port = 80;
-    		std::string host = "0.0.0.0";
-    		std::string server_name = "";
-    		std::string root = "/var/www/html";
-    		std::vector<Location> locations = {
-        		{"/", "/var/www/html", "index.html", false, "", {}}
-    		}; 
+        	int port;
+    		std::string host;
+    		std::string server_name;
+    		std::string root;
+    		std::vector<Location> locations; 
+
+			Server(int p = 80, const std::string& h = "0.0.0.0", const std::string& sn = "", const std::string& r = "/var/www/html",
+           const std::vector<Location>& locs = std::vector<Location>())
+        	: port(p), host(h), server_name(sn), root(r), locations(locs) {}
     	};
 	
 	private:
@@ -32,7 +38,7 @@ class ConfigParser{
 
 	public:
 		//public methods
-		ConfigParser(std::string fileUrl);
+		ConfigParser(char const* fileUrl);
 		~ConfigParser(){}
 
 		int addServerConf();

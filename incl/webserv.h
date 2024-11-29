@@ -9,5 +9,9 @@
 # include <map>
 # include <vector>
 # include <fstream>
+# include <arpa/inet.h>
+# include <netdb.h>
+# include <poll.h>
+# include <cstdlib>
 
 #endif
