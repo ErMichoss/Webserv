@@ -26,7 +26,7 @@ class ConfigParser{
     		std::string root;
     		std::vector<Location> locations; 
 
-			Server(int p = 80, const std::string& h = "0.0.0.0", const std::string& sn = "", const std::string& r = "/var/www/html",
+			Server(int p = 80, const std::string& h = "127.0.0.1", const std::string& sn = "", const std::string& r = "/var/www/html",
            const std::vector<Location>& locs = std::vector<Location>())
         	: port(p), host(h), server_name(sn), root(r), locations(locs) {}
     	};
