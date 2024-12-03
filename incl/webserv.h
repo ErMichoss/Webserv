@@ -1,17 +1,23 @@
 #ifndef WEBSERV_H
 # define WEBSERV_H
 
-# include <iostream>
-# include <cstring>
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <unistd.h>
 # include <map>
-# include <vector>
 # include <fstream>
 # include <arpa/inet.h>
 # include <netdb.h>
-# include <poll.h>
+# include <iostream>
+# include <vector>
+# include <string>
+# include <cstring>
 # include <cstdlib>
+# include <sstream>
+# include <fcntl.h>
+# include <unistd.h>
+# include <sys/types.h>
+# include <sys/socket.h>
+# include <netinet/in.h>
+# include <poll.h>
+# include <sys/stat.h>
+# include <dirent.h>
 
 #endif

@@ -3,6 +3,31 @@
 
 
 /**
+ * @brief handles GET, POST and DELETE HTTP requests
+ * 
+ * @param request The incoming request from the client
+ * 
+ * @return on success returns the request on failure returns 405
+ */
+std::string handle_request(std::string const request){
+	std::istringstream req_stream(request);
+	std::string method, path, protocol;
+
+	req_stream >> method >> path >> protocol;
+
+	if (method == "GET"){
+		if (path == "/") path = "/index.html";
+		//return getFile(path);
+	} else if (method == "POST"){
+		//ejecutar POST
+	} else if (method == "DELETE"){
+		//ejecutar DELETE
+	} else {
+		//devuelve 405
+	}
+}
+
+/**
  * @brief Creates a socket for a port and host of your choice.
  * 
  * @param port The value of the port the socket is going to listen to.
@@ -93,11 +118,23 @@ int main(int argc, char *argv[]){
 		//bucle de conexiones
 		for (size_t i = 0; i < fds.size(); i++){
 			if (fds[i].revents & POLLIN){
-				for (size_t j = 0; < sockets.size(); i++){
+				for (size_t j = 0; j < sockets.size(); i++){
 					if (fds[i].fd == sockets[j]){
 						//Nueva conexion
+						struct sockaddr_in client;
+						socklen_t client_len = sizeof(client);
+						int client_fd = accept(sockets[j], (struct sockaddr*)&client, &client_len);
+						if (client_fd >= 0){
+							struct pollfd poll_client = {client_fd, POLLIN, 0};
+							fds.push_back(poll_client);
+							//mensaje de exito
+						} else {
+							//mensaje de error
+						}	
 					} else {
 						//Manejar cliente
+						//leer datos char buffer[BUFFER_SIZE];
+
 					}
 				}
 			}
