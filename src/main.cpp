@@ -1,31 +1,7 @@
 #include "../incl/webserv.h"
 #include "../incl/ConfigParser.hpp"
+#include "../incl/ServerManager.hpp"
 
-
-/**
- * @brief handles GET, POST and DELETE HTTP requests
- * 
- * @param request The incoming request from the client
- * 
- * @return on success returns the request on failure returns 405
- */
-std::string handle_request(std::string const request){
-	std::istringstream req_stream(request);
-	std::string method, path, protocol;
-
-	req_stream >> method >> path >> protocol;
-
-	if (method == "GET"){
-		if (path == "/") path = "/index.html";
-		//return getFile(path);
-	} else if (method == "POST"){
-		//ejecutar POST
-	} else if (method == "DELETE"){
-		//ejecutar DELETE
-	} else {
-		//devuelve 405
-	}
-}
 
 /**
  * @brief Creates a socket for a port and host of your choice.
@@ -93,54 +69,21 @@ int main(int argc, char *argv[]){
 	char const* file = argv[1];
 	ConfigParser ConfigFile(file);
 	ConfigFile.addServerConf();
-	std::vector<ConfigParser::Server> servers = ConfigFile.getServers();
-	std::vector<int> sockets;
-	std::vector<struct pollfd> fds;
+	std::vector<ConfigParser::Server> servers_conf = ConfigFile.getServers();
+	std::vector<ServerManager> servers;
 
-	for (std::vector<ConfigParser::Server>::iterator it = servers.begin(); it != servers.end(); it++){
-		int socketfd = create_socket(it->port, it->host);
+	for (int i = 0; i < servers_conf.size(); i++){
+		int socketfd = create_socket(servers_conf[i].port, servers_conf[i].host);
 		if (socketfd >= 0){
-			sockets.push_back(socketfd);
-			struct pollfd fd = {socketfd, POLLIN, 0};
-			fds.push_back(fd);
+			ServerManager server(servers_conf[i], socketfd);
+			servers.push_back(server);
 		} 
-		else { std::cerr << "No se pudo crear el socket para " << it->host << ":" << it->port << std::endl; }
+		else { std::cerr << "No se pudo crear el socket para " << servers_conf[i].host << ":" << servers_conf[i].port << std::endl; }
 	}
 
-	//bucle principal
-	while (true) {
-		int count = poll(&fds[0], fds.size(), -1);
-		if (count < 0){
-			//Mensaje de Error
-			break;
-		}
-
-		//bucle de conexiones
-		for (size_t i = 0; i < fds.size(); i++){
-			if (fds[i].revents & POLLIN){
-				for (size_t j = 0; j < sockets.size(); i++){
-					if (fds[i].fd == sockets[j]){
-						//Nueva conexion
-						struct sockaddr_in client;
-						socklen_t client_len = sizeof(client);
-						int client_fd = accept(sockets[j], (struct sockaddr*)&client, &client_len);
-						if (client_fd >= 0){
-							struct pollfd poll_client = {client_fd, POLLIN, 0};
-							fds.push_back(poll_client);
-							//mensaje de exito
-						} else {
-							//mensaje de error
-						}	
-					} else {
-						//Manejar cliente
-						//leer datos char buffer[BUFFER_SIZE];
-
-					}
-				}
-			}
-		}
+	for (int i = 0; i < servers.size(); i++){
+		servers[i].startServer();
 	}
 
-	//cerrar todas las conexiones
 	return 0;
 }
