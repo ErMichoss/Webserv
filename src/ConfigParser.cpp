@@ -23,6 +23,9 @@ int ConfigParser::addServerConf(){
 		if (line.substr(0, 6) == "SERVER"){
 			while(std::getline(this->file, line)){
 				this->trim(line);
+				size_t index = line.find("#", 0);
+				if (index != 0)
+					line = line.substr(0, index);
 				if (line.substr(0, 6) == "SERVER")
 					break;
 				if (line.substr(0, 6) == "listen"){
@@ -42,7 +45,7 @@ int ConfigParser::addServerConf(){
 					std::string host = line.substr(5);
 					this->trim(host);
 					server.host = host;
-				}else if (line.substr(0, 11) == "server_name"){
+				} else if (line.substr(0, 11) == "server_name"){
 					if (this->checkColon(11, line))
 						return 1;
 					std::string snValue = line.substr(12);
@@ -54,8 +57,7 @@ int ConfigParser::addServerConf(){
 					std::string rootValue = line.substr(5);
 					this->trim(rootValue);
 					server.root = rootValue;
-				}
-				else if (line.substr(0, 8) == "LOCATION"){
+				} else if (line.substr(0, 8) == "LOCATION"){
 					Location location;
 
 					if (this->checkColon(8, line))
@@ -101,6 +103,9 @@ int ConfigParser::addServerConf(){
 						}
 					}
 					server.locations.push_back(location);
+				} else if ( !line.empty() &&line.c_str()[0] != '#'){
+					std::cerr << "Unexpected line: " << line << std::endl;
+					return 1;
 				}
 			}
 		}

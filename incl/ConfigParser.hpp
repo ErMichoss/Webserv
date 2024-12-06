@@ -46,6 +46,7 @@ class ConfigParser{
 		std::vector<ConfigParser::Server> getServers(){
 			return this->servers;
 		}
+
 	private:
 		//auxiliar methods
 

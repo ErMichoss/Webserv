@@ -8,7 +8,8 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket){
 std::string ServerManager::getFile(std::string request_path, std::string server_root){
 	std::string path = server_root + request_path;
 	int fd = open(path.c_str(), O_RDONLY);
-	if (fd < 0) return "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<h1>404 Not Found</h1>";
+	if (fd < 0)
+		return "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<h1>404 Not Found</h1>";
 
 	char buffer[BUFFER_SIZE];
 	std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
@@ -54,16 +55,16 @@ void ServerManager::startServer(){
     fds.push_back(server_pollfd);
 
 	while (true) {
-	int count = poll(&fds[0], fds.size(), -1);
-	if (count < 0){
-		//Mensaje de Error
-		std::cerr << "Error en poll" << std::endl;
-		break;
-	}
+		int count = poll(&fds[0], fds.size(), -1);
+		if (count < 0){
+			//Mensaje de Error
+			std::cerr << "Error en poll" << std::endl;
+			break;
+		}
 
-	//bucle de conexiones
-	for (size_t i = 0; i < fds.size(); i++){
-		if (fds[i].revents & POLLIN){
+		//bucle de conexiones
+		for (size_t i = 0; i < fds.size(); i++){
+			if (fds[i].revents & POLLIN){
 				if (fds[i].fd == this->server_fd){
 					//Nueva conexion
 					struct sockaddr_in client;
@@ -85,14 +86,18 @@ void ServerManager::startServer(){
 					std::memset(buffer, 0, sizeof(buffer));
 					ssize_t bytes = read(fds[i].fd, buffer, sizeof(buffer));
 					if (bytes > 0){
-						std::string const response = handle_request(std::string(buffer, bytes), this->server_fd);
+						std::string const response = handle_request(std::string(buffer, bytes), this->server_conf);
 						send(fds[i].fd, response.c_str(), strlen(response.c_str()), 0);
+						std::cout << "Client disconnected: " << fds[i].fd << std::endl;
+						close(fds[i].fd);
+						fds.erase(fds.begin() + i);
+						--i;
 					} else {
 						// Desconexion o error.
 						std::cout << "Client disconnected: " << fds[i].fd << std::endl;
-                    	close(fds[i].fd);
-                    	fds.erase(fds.begin() + i);
-	                  	--i;
+						close(fds[i].fd);
+						fds.erase(fds.begin() + i);
+						--i;
 					}
 				}
 			}
