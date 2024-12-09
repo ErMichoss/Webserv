@@ -1,6 +1,6 @@
-#include "../incl/webserv.h"
-#include "../incl/ConfigParser.hpp"
-#include "../incl/ServerManager.hpp"
+#include "webserv.h"
+#include "ConfigParser.hpp"
+#include "ServerManager.hpp"
 
 
 /**
@@ -14,7 +14,7 @@
  * @return if it fails it returns -1 on success it returns the sockets fd.
  */
 int create_socket(int port, std::string host){
-	struct addrinfo addr_info, *res;
+	struct addrinfo addr_info, *res, *head;
 	int socketfd;
 
 	std::memset(&addr_info, 0, sizeof(addr_info)); // IMPORTANTE
@@ -36,20 +36,22 @@ int create_socket(int port, std::string host){
 		return -1;
 	}
 
-	socketfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-	if (socketfd < 0){
-		std::cerr << "Error: no se pudo crear el socket" << std::endl;
-		freeaddrinfo(res);
+	head = res;
+	while (res != NULL){
+		socketfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		if (socketfd < 0){
+			std::cerr << "Error: no se pudo crear el socket" << std::endl;
+		} else if (bind(socketfd, res->ai_addr, res->ai_addrlen) == 0){
+			break;
+		}
+		close(socketfd);
+		res = res->ai_next;
+	}
+	if (res == NULL){
+		freeaddrinfo(head);
 		return -1;
 	}
-
-	if (bind(socketfd, res->ai_addr, res->ai_addrlen) < 0){
-		std::cerr << "Error: no se pudo vincular el socket" << std::endl;
-		freeaddrinfo(res);
-		return -1;
-	}
-
-	freeaddrinfo(res);
+	freeaddrinfo(head);
 
 	//configurar el socket para escuchar.
 	if (listen(socketfd, 10) < 0){
@@ -70,18 +72,23 @@ int main(int argc, char *argv[]){
 	ConfigParser ConfigFile(file);
 	ConfigFile.addServerConf();
 	std::vector<ConfigParser::Server> servers_conf = ConfigFile.getServers();
-	std::vector<ServerManager> servers;
+	std::vector<ServerManager> servers = std::vector<ServerManager>();
 
-	for (int i = 0; i < servers_conf.size(); i++){
-		int socketfd = create_socket(servers_conf[i].port, servers_conf[i].host);
-		if (socketfd >= 0){
-			ServerManager server(servers_conf[i], socketfd);
-			servers.push_back(server);
-		} 
-		else { std::cerr << "No se pudo crear el socket para " << servers_conf[i].host << ":" << servers_conf[i].port << std::endl; }
+	for (size_t i = 0; i < servers_conf.size(); i++){
+		int index = hostport_match(servers, servers_conf[i]);
+		if (index == -1){
+			int socketfd = create_socket(servers_conf[i].port, servers_conf[i].host);
+			if (socketfd >= 0){
+				ServerManager server(servers_conf[i], socketfd);
+				servers.push_back(server);
+			} 
+			else { std::cerr << "No se pudo crear el socket para " << servers_conf[i].host << ":" << servers_conf[i].port << std::endl; }
+		} else {
+			servers[index].addConf(servers_conf[i]);
+		}
 	}
 
-	for (int i = 0; i < servers.size(); i++){
+	for (size_t i = 0; i < servers.size(); i++){
 		servers[i].startServer();
 	}
 

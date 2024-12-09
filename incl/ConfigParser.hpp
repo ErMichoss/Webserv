@@ -1,7 +1,16 @@
 #ifndef CONFIGPARSER_HPP
 # define CONFIGPARSER_HPP
 
-# include "webserv.h"
+# include <string>
+# include <map>
+# include <vector>
+# include <sstream>
+# include <iostream>
+# include <fstream>
+# include <cstdlib>
+# include <cstring>
+
+int onlySpace(std::string str);
 
 class ConfigParser{
 	public:
@@ -55,10 +64,12 @@ class ConfigParser{
 		 * @param[in] &str a reference to the string that is going to be modified. 
 		 */
 		void trim(std::string& str) const {
-			if (str.length() > 0){
+			if (str.length() > 0 && !onlySpace(str)){
         		size_t first = str.find_first_not_of(" \t");
         		size_t last = str.find_last_not_of(" \t");
         		str = str.substr(first, (last - first + 1));
+			} else {
+				str.clear();
 			}
     	}
 
