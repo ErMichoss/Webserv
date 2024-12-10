@@ -25,6 +25,7 @@ class ServerManager{
 		//Private Methods
 		std::string handle_request(std::string const request, ConfigParser::Server server_conf);
 		std::string getFile(std::string request_path, std::string server_root);
+		std::string handlePost(std::string request, std::string server_root);
 		ConfigParser::Server getServerName(std::string request);
 };
 

@@ -9,6 +9,88 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket){
 }
 
 /**
+ * @brief The handlePost function handles HTTP POST requests containing file data sent by the client.
+ * 
+ * @param request The request that has been sent to the server.
+ * @param server_root the path were the servers static files are located.
+ * 
+ * @details line 1 of the function to line 4 -> find the end of the header, if the delimiter is not found an error 400 is send.
+ * line 6 of the function to line 10 -> extract the headers of the request and verify Content-Lenght, if is not present an error 411(Lenght Required) is send.
+ * line 12 of the function to line 15 -> verify the content is multipart/form-data, if is not specified an error 415(Unsupported Media Type) is send.
+ * line 17 of the function to line 24 -> obtain the multipart delimiter, on failure an error 400 is send.
+ * line 26 of the function to line 38 -> extract the request body, on failure an error 400 is send.
+ * line 40 of the function to line 46 -> extract the name of the file, on failure an error 400 is send.
+ * line 48 of the function to line 53 -> extract the file data, on faiure an error 400 is send.
+ * line 55 of the function to line 62 -> save the file in the server.
+ * 
+ * 
+ * @returns on failure a Error Message with its coresponding id, on success a Success Message with its coresponding id.
+ */
+std::string ServerManager::handlePost(std::string request, std::string server_root) {
+    std::size_t header_end = request.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+    }
+
+    std::string headers = request.substr(0, header_end);
+    std::size_t content_length_pos = headers.find("Content-Length: ");
+    if (content_length_pos == std::string::npos) {
+        return "HTTP/1.1 411 Length Required\r\nContent-Type: text/html\r\n\r\n<h1>411 Length Required</h1>";
+    }
+
+    std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
+    if (content_type_pos == std::string::npos) {
+        return "HTTP/1.1 415 Unsupported Media Type\r\nContent-Type: text/html\r\n\r\n<h1>415 Unsupported Media Type</h1>";
+    }
+
+    std::string boundary_prefix = "boundary=";
+    std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
+    if (boundary_pos == std::string::npos) {
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+    }
+    std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
+    boundary = boundary.substr(0, boundary.find("\r\n"));
+
+    std::string body = request.substr(header_end + 4);
+
+    std::size_t file_start = body.find(boundary);
+    if (file_start == std::string::npos) {
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+    }
+    file_start += boundary.size() + 2;
+
+    std::size_t file_end = body.find(boundary, file_start);
+    if (file_end == std::string::npos) {
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+    }
+    std::string file_content = body.substr(file_start, file_end - file_start);
+
+    std::size_t filename_pos = file_content.find("filename=\"");
+    if (filename_pos == std::string::npos) {
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+    }
+    std::string filename = file_content.substr(filename_pos + 10);
+    filename = filename.substr(0, filename.find("\""));
+
+    std::size_t data_start = file_content.find("\r\n\r\n");
+    if (data_start == std::string::npos) {
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+    }
+    data_start += 4;
+    std::string file_data = file_content.substr(data_start);
+
+    std::string file_path = server_root + "/" + filename;
+    int fd = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
+    if (fd < 0) {
+        return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\n\r\n<h1>500 Internal Server Error</h1>";
+    }
+    write(fd, file_data.c_str(), file_data.size());
+    close(fd);
+
+    return "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\n\r\n<h1>File Uploaded Successfully</h1>";
+}
+
+/**
  * @brief Serves the static file that the client request throught the GET request.
  * 
  * @param request_path the path of the file the client requests
@@ -48,13 +130,15 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 
 	req_stream >> method >> path >> protocol;
 
+	//Cosas adicionales -> mandar location en vez del root para ver las reglas de esa ruta y asi saber si se puede ejecutar GET desde esa pagina.
 	if (method == "GET"){
 		if (path == "/")
 			path = "/" + server_conf.locations[0].index;
 		return getFile(path, server_conf.root);
 	} else if (method == "POST"){
-		//ejecutar POST
-		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 POST</h1>";
+		if (path == "/upload") {
+        	return handlePost(request, server_conf.root);
+    	}
 	} else if (method == "DELETE"){
 		//ejecutar DELETE
 		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
