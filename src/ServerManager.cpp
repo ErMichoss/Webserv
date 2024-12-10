@@ -73,10 +73,13 @@ void ServerManager::startServer(){
 	signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
-	while (running) {
+	while (1) {
 		int count = poll(&fds[0], fds.size(), -1);
+
+		if (!running)
+			break;
+			
 		if (count < 0){
-			//Mensaje de Error
 			std::cerr << "Error en poll: ";
 			perror("poll");
 			break;
@@ -107,7 +110,7 @@ void ServerManager::startServer(){
 					ssize_t bytes = read(fds[i].fd, buffer, sizeof(buffer));
 					if (bytes > 0){
 						ConfigParser::Server server_conf = getServerName(std::string(buffer, bytes));
-						std::string const response = handle_request(std::string(buffer, bytes), this->server_confs[3]);
+						std::string const response = handle_request(std::string(buffer, bytes), server_conf);
 						send(fds[i].fd, response.c_str(), strlen(response.c_str()), 0);
 						std::cout << "Client disconnected: " << fds[i].fd << std::endl;
 						close(fds[i].fd);

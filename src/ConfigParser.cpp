@@ -112,6 +112,7 @@ int ConfigParser::addServerConf(){
 			}
 		}
 		this->servers.push_back(server);
+		server.locations.clear();
 	}
 	return 0;
 }
