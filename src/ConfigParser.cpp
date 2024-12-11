@@ -101,6 +101,12 @@ int ConfigParser::addServerConf(){
 								std::string redirect = line.substr(16);
 								this->trim(redirect);
 								location.redirect_target = redirect;
+							} else if (line.substr(0, 5) == "limit"){
+								if (this->checkColon(5, line))
+									return 1;
+								std::string limit = line.substr(6);
+								this->trim(limit);
+								location.limit = limit;
 							}
 						}
 						server.locations.push_back(location);

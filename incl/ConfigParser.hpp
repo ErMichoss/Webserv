@@ -21,11 +21,12 @@ class ConfigParser{
         	std::string index;
         	bool autoindex;
         	std::string redirect_target;
+			std::string limit;
         	std::map<std::string, std::string> fastcgi_params;
 
 			Location(const std::string& p = "/", const std::string& r = "", const std::string& i = "index.html",
-             bool a = false, const std::string& rt = "")
-        	: path(p), root(r), index(i), autoindex(a), redirect_target(rt) {}
+             bool a = false, const std::string& rt = "", const std::string& l = "NONE")
+        	: path(p), root(r), index(i), autoindex(a), redirect_target(rt), limit(l) {}
     	};
 
     	struct Server {

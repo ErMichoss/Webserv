@@ -127,13 +127,41 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 std::string ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf){
 	std::istringstream req_stream(request);
 	std::string method, path, protocol;
+	std::vector<std::string> limits_vector;
+	int flag = -1;
 
 	req_stream >> method >> path >> protocol;
+
+	for (size_t i = 0; i < server_conf.locations.size(); i++){
+		if (path == server_conf.locations[i].path){
+			flag = i;
+			break;
+		}
+	}
+	if (flag == -1){
+		flag = 0;
+	}
+	std::istringstream limits(server_conf.locations[flag].limit);
+	std::string limit;
+	while (limits >> limit){
+		limits_vector.push_back(limit);
+	}
+	std::cout << limits_vector[0] << std::endl;
 
 	//Cosas adicionales -> mandar location en vez del root para ver las reglas de esa ruta y asi saber si se puede ejecutar GET desde esa pagina.
 	if (method == "GET"){
 		if (path == "/")
 			path = "/" + server_conf.locations[0].index;
+		if (limits_vector[0] != "NONE"){
+			flag = 0;
+			for (size_t i = 0; i < limits_vector.size(); i++){
+				if (limits_vector[i] == "GET")
+					flag = 1;
+			}
+			if (flag != 0){
+				return "HTTP/1.1 401 Unauthorized\r\n Content-Type: text/html\r\n <h1>401 Unauthorized</h1>";
+			}
+		}
 		return getFile(path, server_conf.root);
 	} else if (method == "POST"){
 		if (path == "/upload") {
@@ -159,15 +187,15 @@ void ServerManager::startServer(){
 
 	while (1) {
 		int count = poll(&fds[0], fds.size(), -1);
-
-		if (!running)
-			break;
-			
 		if (count < 0){
 			std::cerr << "Error en poll: ";
 			perror("poll");
 			break;
 		}
+
+		if (!running)
+			break;
+			
 
 		//bucle de conexiones
 		for (size_t i = 0; i < fds.size(); i++){
