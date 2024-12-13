@@ -102,11 +102,17 @@ int ConfigParser::addServerConf(){
 								this->trim(redirect);
 								location.redirect_target = redirect;
 							} else if (line.substr(0, 5) == "limit"){
+								std::vector<std::string> limits;
 								if (this->checkColon(5, line))
 									return 1;
 								std::string limit = line.substr(6);
 								this->trim(limit);
-								location.limit = limit;
+								std::istringstream stream(limit);
+								std::string palabra;
+								while (stream >> palabra) {
+									limits.push_back(palabra);
+								}
+								location.limits = limits;
 							}
 						}
 						server.locations.push_back(location);

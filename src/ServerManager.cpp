@@ -29,7 +29,7 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket){
 std::string ServerManager::handlePost(std::string request, std::string server_root) {
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request1</h1>";
     }
 
     std::string headers = request.substr(0, header_end);
@@ -46,35 +46,35 @@ std::string ServerManager::handlePost(std::string request, std::string server_ro
     std::string boundary_prefix = "boundary=";
     std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
     if (boundary_pos == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request2</h1>";
     }
     std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
     boundary = boundary.substr(0, boundary.find("\r\n"));
 
     std::string body = request.substr(header_end + 4);
-
+	std::cout << body << std::endl;
     std::size_t file_start = body.find(boundary);
     if (file_start == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request3</h1>";
     }
     file_start += boundary.size() + 2;
 
     std::size_t file_end = body.find(boundary, file_start);
     if (file_end == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request4</h1>";
     }
     std::string file_content = body.substr(file_start, file_end - file_start);
 
     std::size_t filename_pos = file_content.find("filename=\"");
     if (filename_pos == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request5</h1>";
     }
     std::string filename = file_content.substr(filename_pos + 10);
     filename = filename.substr(0, filename.find("\""));
 
     std::size_t data_start = file_content.find("\r\n\r\n");
     if (data_start == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>";
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request6</h1>";
     }
     data_start += 4;
     std::string file_data = file_content.substr(data_start);
@@ -89,6 +89,7 @@ std::string ServerManager::handlePost(std::string request, std::string server_ro
 
     return "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\n\r\n<h1>File Uploaded Successfully</h1>";
 }
+
 
 /**
  * @brief Serves the static file that the client request throught the GET request.
@@ -127,46 +128,32 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 std::string ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf){
 	std::istringstream req_stream(request);
 	std::string method, path, protocol;
-	std::vector<std::string> limits_vector;
-	int flag = -1;
+	size_t index = 0;
 
 	req_stream >> method >> path >> protocol;
 
 	for (size_t i = 0; i < server_conf.locations.size(); i++){
-		if (path == server_conf.locations[i].path){
-			flag = i;
+		if (server_conf.locations[i].path == path){
+			index = i;
 			break;
 		}
 	}
-	if (flag == -1){
-		flag = 0;
-	}
-	std::istringstream limits(server_conf.locations[flag].limit);
-	std::string limit;
-	while (limits >> limit){
-		limits_vector.push_back(limit);
-	}
-	std::cout << limits_vector[0] << std::endl;
-
-	//Cosas adicionales -> mandar location en vez del root para ver las reglas de esa ruta y asi saber si se puede ejecutar GET desde esa pagina.
+	if (server_conf.locations[index].limits.empty())
+		server_conf.locations[index].limits.push_back("NONE");
 	if (method == "GET"){
-		if (path == "/")
-			path = "/" + server_conf.locations[0].index;
-		if (limits_vector[0] != "NONE"){
-			flag = 0;
-			for (size_t i = 0; i < limits_vector.size(); i++){
-				if (limits_vector[i] == "GET")
-					flag = 1;
-			}
-			if (flag != 0){
-				return "HTTP/1.1 401 Unauthorized\r\n Content-Type: text/html\r\n <h1>401 Unauthorized</h1>";
+		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")){
+			if (path == "/")
+				path = "/" + server_conf.locations[index].index;
+			return getFile(path, server_conf.root);
+		}
+		return "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: text/html\r\n\r\n<h1>405 Method Not Allowed</h1>";
+	} else if (method == "POST"){
+		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")){
+			if (path == "/upload") {
+				return handlePost(request, server_conf.root);
 			}
 		}
-		return getFile(path, server_conf.root);
-	} else if (method == "POST"){
-		if (path == "/upload") {
-        	return handlePost(request, server_conf.root);
-    	}
+		return "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: text/html\r\n\r\n<h1>405 Method Not Allowed</h1>";
 	} else if (method == "DELETE"){
 		//ejecutar DELETE
 		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
@@ -187,15 +174,15 @@ void ServerManager::startServer(){
 
 	while (1) {
 		int count = poll(&fds[0], fds.size(), -1);
+
+		if (!running)
+			break;
+			
 		if (count < 0){
 			std::cerr << "Error en poll: ";
 			perror("poll");
 			break;
 		}
-
-		if (!running)
-			break;
-			
 
 		//bucle de conexiones
 		for (size_t i = 0; i < fds.size(); i++){
@@ -273,5 +260,23 @@ ConfigParser::Server ServerManager::getServersConf(){
  */
 void ServerManager::addConf(ConfigParser::Server server_conf){
 	this->server_confs.push_back(server_conf);
+}
+
+/**
+ * @brief Checks if the method is in the limits vector.
+ * 
+ * @param limits The limits vector for the location in question.
+ * @param search The method that is going to be checked.
+ * 
+ * @return If the method is found true, otherwise false.
+ */
+int ServerManager::checkLimits(std::vector<std::string> limits, std::string search) const{
+	int exit = 0;
+	for (size_t i = 0; i < limits.size(); i++){
+		if (limits[i] == search){
+			exit = 1;
+		}
+	}
+	return exit;
 }
 

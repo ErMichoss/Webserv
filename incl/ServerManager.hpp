@@ -27,6 +27,7 @@ class ServerManager{
 		std::string getFile(std::string request_path, std::string server_root);
 		std::string handlePost(std::string request, std::string server_root);
 		ConfigParser::Server getServerName(std::string request);
+		int checkLimits(std::vector<std::string> limits, std::string search) const;
 };
 
 #endif
