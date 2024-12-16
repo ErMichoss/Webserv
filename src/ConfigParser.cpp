@@ -113,6 +113,20 @@ int ConfigParser::addServerConf(){
 									limits.push_back(palabra);
 								}
 								location.limits = limits;
+							} else if (line.substr(0, 12) == "fastcgi_pass"){
+								std::string fastcgi_pass;
+								if (this->checkColon(12, line))
+									return 1;
+								fastcgi_pass = line.substr(13);
+								this->trim(fastcgi_pass);
+								location.fastcgi_pass = fastcgi_pass;
+							} else if (line.substr(0, 13) == "fastcgi_param"){
+								std::string id, value;
+								if (this->checkColon(13, line))
+									return 1;
+								std::istringstream fastcgi(line.substr(14));
+								fastcgi >> id >> value;
+								location.fastcgi_params.insert(std::make_pair(id, value));
 							}
 						}
 						server.locations.push_back(location);

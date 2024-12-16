@@ -1,5 +1,7 @@
 #include "ServerManager.hpp"
 
+static bool running = true;
+
 /**
  * @brief The constructor for the ServerManager class
  */
@@ -29,52 +31,52 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket){
 std::string ServerManager::handlePost(std::string request, std::string server_root) {
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request1</h1>";
+        return HTTP400;
     }
 
     std::string headers = request.substr(0, header_end);
     std::size_t content_length_pos = headers.find("Content-Length: ");
     if (content_length_pos == std::string::npos) {
-        return "HTTP/1.1 411 Length Required\r\nContent-Type: text/html\r\n\r\n<h1>411 Length Required</h1>";
+        return HTTP411;
     }
 
     std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
     if (content_type_pos == std::string::npos) {
-        return "HTTP/1.1 415 Unsupported Media Type\r\nContent-Type: text/html\r\n\r\n<h1>415 Unsupported Media Type</h1>";
+        return HTTP415;
     }
 
     std::string boundary_prefix = "boundary=";
     std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
     if (boundary_pos == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request2</h1>";
+        return HTTP400;
     }
     std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
     boundary = boundary.substr(0, boundary.find("\r\n"));
 
     std::string body = request.substr(header_end + 4);
-	std::cout << body << std::endl;
+	//std::cout << body << std::endl;
     std::size_t file_start = body.find(boundary);
     if (file_start == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request3</h1>";
+        return HTTP400;
     }
     file_start += boundary.size() + 2;
 
     std::size_t file_end = body.find(boundary, file_start);
     if (file_end == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request4</h1>";
+        return HTTP400;
     }
     std::string file_content = body.substr(file_start, file_end - file_start);
 
     std::size_t filename_pos = file_content.find("filename=\"");
     if (filename_pos == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request5</h1>";
+        return HTTP400;
     }
     std::string filename = file_content.substr(filename_pos + 10);
     filename = filename.substr(0, filename.find("\""));
 
     std::size_t data_start = file_content.find("\r\n\r\n");
     if (data_start == std::string::npos) {
-        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request6</h1>";
+        return HTTP400;
     }
     data_start += 4;
     std::string file_data = file_content.substr(data_start);
@@ -82,7 +84,7 @@ std::string ServerManager::handlePost(std::string request, std::string server_ro
     std::string file_path = server_root + "/" + filename;
     int fd = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
     if (fd < 0) {
-        return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\n\r\n<h1>500 Internal Server Error</h1>";
+        return HTTP500;
     }
     write(fd, file_data.c_str(), file_data.size());
     close(fd);
@@ -101,10 +103,9 @@ std::string ServerManager::handlePost(std::string request, std::string server_ro
  */
 std::string ServerManager::getFile(std::string request_path, std::string server_root){
 	std::string path = server_root + request_path;
-	std::cout << path << std::endl;
 	int fd = open(path.c_str(), O_RDONLY);
 	if (fd < 0)
-		return "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<h1>404 Not Found</h1>";
+		return HTTP400;
 
 	char buffer[BUFFER_SIZE];
 	std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
@@ -146,19 +147,19 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 				path = "/" + server_conf.locations[index].index;
 			return getFile(path, server_conf.root);
 		}
-		return "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: text/html\r\n\r\n<h1>405 Method Not Allowed</h1>";
+		return HTTP405;
 	} else if (method == "POST"){
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")){
 			if (path == "/upload") {
 				return handlePost(request, server_conf.root);
 			}
 		}
-		return "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: text/html\r\n\r\n<h1>405 Method Not Allowed</h1>";
+		return HTTP405;
 	} else if (method == "DELETE"){
 		//ejecutar DELETE
 		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
 	}
-	return "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: text/html\r\n\r\n<h1>405 Method Not Allowed</h1>";
+	return HTTP405;
 }
 
 /**

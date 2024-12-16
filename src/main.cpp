@@ -2,7 +2,6 @@
 #include "ConfigParser.hpp"
 #include "ServerManager.hpp"
 
-
 /**
  * @brief Creates a socket for a port and host of your choice.
  * 

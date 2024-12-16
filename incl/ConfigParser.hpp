@@ -21,6 +21,7 @@ class ConfigParser{
         	std::string index;
         	bool autoindex;
         	std::string redirect_target;
+			std::string fastcgi_pass;
 			std::vector<std::string> limits;
         	std::map<std::string, std::string> fastcgi_params;
 
