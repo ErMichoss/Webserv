@@ -21,9 +21,7 @@ class ConfigParser{
         	std::string index;
         	bool autoindex;
         	std::string redirect_target;
-			std::string fastcgi_pass;
 			std::vector<std::string> limits;
-        	std::map<std::string, std::string> fastcgi_params;
 
 			Location(const std::string& p = "/", const std::string& r = "", const std::string& i = "index.html",
              bool a = false, const std::string& rt = "")
@@ -35,6 +33,7 @@ class ConfigParser{
     		std::string host;
     		std::string server_name;
     		std::string root;
+			std::string cgi;
     		std::vector<Location> locations; 
 
 			Server(int p = 80, const std::string& h = "127.0.0.1", const std::string& sn = "", const std::string& r = "/var/www/html",
@@ -60,10 +59,12 @@ class ConfigParser{
 
 	private:
 		//auxiliar methods
+		int extractServerConf(Server& server, std::string line);
+		int extractLocationConf(Location& location, std::string line);
 
 		/**
 		 * A function to get rid of blanc spaces at the start and end of a string.
-		 * @param[in] &str a reference to the string that is going to be modified. 
+		 * @param &str a reference to the string that is going to be modified. 
 		 */
 		void trim(std::string& str) const {
 			if (str.length() > 0 && !onlySpace(str)){
@@ -77,8 +78,8 @@ class ConfigParser{
 
 		/**
 		 * A function that checks if there is a colon where it should be one in the conf file
-		 * @param[in] pos The position in the line where the colo should be.
-		 * @param[in] line The line we are checking.
+		 * @param pos The position in the line where the colo should be.
+		 * @param line The line we are checking.
 		 */
 		int checkColon(int pos, std::string line){
 			int exit = 0;
@@ -86,6 +87,23 @@ class ConfigParser{
 			if (line.c_str()[pos] != ':'){
 				std::cerr << "Error: Unexpected " << line.c_str()[pos] << "in the conf line: " << line << std::endl;
 				exit = 1;
+			}
+			return exit;
+		}
+
+		/**
+		 * @brief A function that checks if a string only contains digits.
+		 * 
+		 * @param numStr the string that is going to be checked.
+		 * 
+		 * @return on success 1, on failure 2.
+		 */
+		int checkAllDigit(std::string numStr){
+			int exit = 1;
+			for (size_t i = 0; i < std::strlen(numStr.c_str()); i++){
+				if (!std::isdigit(numStr.c_str()[i])){
+					exit = 0;
+				}
 			}
 			return exit;
 		}

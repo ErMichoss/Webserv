@@ -1,7 +1,5 @@
 #include "ServerManager.hpp"
 
-static bool running = true;
-
 /**
  * @brief The constructor for the ServerManager class
  */
@@ -28,7 +26,7 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket){
  * 
  * @returns on failure a Error Message with its coresponding id, on success a Success Message with its coresponding id.
  */
-std::string ServerManager::handlePost(std::string request, std::string server_root) {
+std::string ServerManager::handlePostUpload(std::string request, std::string server_root) {
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
         return HTTP400;
@@ -54,7 +52,6 @@ std::string ServerManager::handlePost(std::string request, std::string server_ro
     boundary = boundary.substr(0, boundary.find("\r\n"));
 
     std::string body = request.substr(header_end + 4);
-	//std::cout << body << std::endl;
     std::size_t file_start = body.find(boundary);
     if (file_start == std::string::npos) {
         return HTTP400;
@@ -92,6 +89,176 @@ std::string ServerManager::handlePost(std::string request, std::string server_ro
     return "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\n\r\n<h1>File Uploaded Successfully</h1>";
 }
 
+/**
+ * @brief Puts the data of the HTTP request body in a std::map<std::string, std::string>
+ * 
+ * @param body The body of the HTTP request
+ * @param content_type The type of content the function is going to process
+ * 
+ * @details If the data type is not urlencoded or json it will just return map[content_type] = body.
+ * 
+ * @returns The std::map with the data processed like key - value
+ */
+std::map<std::string, std::string> ServerManager::getBodyData(std::string body, std::string content_type){
+	std::map<std::string, std::string> data;
+	std::string valueData;
+
+	if (content_type == "application/x-www-form-urlencoded"){
+		while (!body.empty()){
+			std::size_t index = body.find_first_of('&');
+			if (index != std::string::npos) {
+				valueData = body.substr(0, index);
+				body = body.substr(index + 1);
+			} else {
+				valueData = body;
+				body.clear();
+			}
+
+			index = valueData.find_first_of('=');
+			if (index != std::string::npos) {
+				std::string key = valueData.substr(0, index);
+				std::string value = valueData.substr(index + 1);
+				data[key] = value;
+			}
+		}
+	} else if (content_type == "application/json") {
+		std::string::size_type inicio = body.find("{");
+		std::string::size_type fin = body.find("}");
+		if (inicio != std::string::npos && fin != std::string::npos) {
+			body = body.substr(inicio + 1, fin - inicio - 1);
+		}
+
+		std::string::size_type pos = 0;
+		while ((pos = body.find(",")) != std::string::npos || !body.empty()) {
+			std::string campo;
+
+			if (pos != std::string::npos) {
+				campo = body.substr(0, pos);
+				body = body.substr(pos + 1);
+			} else {
+				campo = body;
+				body.clear();
+			}
+
+			for (std::string::size_type i = 0; i < campo.size(); ++i) {
+				if (campo[i] == '\"' || campo[i] == ' ') {
+					campo.erase(i, 1);
+					--i;
+				}
+			}
+
+			std::string::size_type index = campo.find(":");
+			if (index != std::string::npos) {
+				std::string key = campo.substr(0, index);
+				std::string value = campo.substr(index + 1);
+				data[key] = value;
+			}
+		}
+	} else {
+		data[content_type] = body;
+	}
+	return data;
+}
+
+/**
+ * @brief Puts the data of a Multiopart/Form-Data type HTTP request in a map like map[filename] = filedata.
+ * 
+ * @param request The request sent by the client
+ * 
+ * @return on success returns map[filename] = filedata, on failure returns empty map.
+*/
+std::map<std::string, std::string> ServerManager::getMultipartFormData(std::string request){
+	std::map<std::string, std::string> data;
+	std::size_t header_end = request.find("\r\n\r\n");
+
+    std::string headers = request.substr(0, header_end);
+    //std::size_t content_length_pos = headers.find("Content-Length: ");
+
+    std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
+
+    std::string boundary_prefix = "boundary=";
+    std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
+    if (boundary_pos == std::string::npos) {
+        return data;
+    }
+    std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
+    boundary = boundary.substr(0, boundary.find("\r\n"));
+
+    std::string body = request.substr(header_end + 4);
+    std::size_t file_start = body.find(boundary);
+    if (file_start == std::string::npos) {
+        return data;
+    }
+    file_start += boundary.size() + 2;
+
+    std::size_t file_end = body.find(boundary, file_start);
+    if (file_end == std::string::npos) {
+        return data;
+    }
+    std::string file_content = body.substr(file_start, file_end - file_start);
+
+    std::size_t filename_pos = file_content.find("filename=\"");
+    if (filename_pos == std::string::npos) {
+        return data;
+    }
+    std::string filename = file_content.substr(filename_pos + 10);
+    filename = filename.substr(0, filename.find("\""));
+
+    std::size_t data_start = file_content.find("\r\n\r\n");
+    if (data_start == std::string::npos) {
+        return data;
+    }
+    data_start += 4;
+    std::string file_data = file_content.substr(data_start);
+	
+	data[filename] = file_data;
+	return data;
+}
+
+/**
+ * 
+ */
+std::string  ServerManager::handlePost(std::string request, std::string server_root){
+	(void)server_root;
+	std::size_t header_end = request.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        return HTTP400;
+    }
+
+    std::string headers = request.substr(0, header_end);
+    std::size_t content_length_pos = headers.find("Content-Length: ");
+    if (content_length_pos == std::string::npos) {
+        return HTTP411;
+    }
+	//Detectar el tipo de formato que tiene el Type-Content.
+	std::size_t content_type_pos = headers.find("Content-Type: ");
+    if (content_type_pos == std::string::npos) {
+        return HTTP415;
+    }
+
+    std::string content_type = headers.substr(content_type_pos + 14);
+    std::size_t content_type_end = content_type.find("\r\n");
+    if (content_type_end != std::string::npos) {
+        content_type = content_type.substr(0, content_type_end);
+    }
+
+    std::cout << "Content-Type: " << content_type << std::endl;
+
+    std::string body = request.substr(header_end + 4);
+	
+	//aqui pillas los datos a no ser que sea multipart/form-data
+	std::map<std::string, std::string> data;
+	if (content_type != "multipart/form-data")
+		data = getBodyData(body, content_type);
+	else{
+		data = getMultipartFormData(request);
+		if (data.empty())
+			return HTTP400;
+	}
+	//TODO aplicar POST y el cgi
+		
+	return HTTP405;
+}
 
 /**
  * @brief Serves the static file that the client request throught the GET request.
@@ -145,14 +312,15 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")){
 			if (path == "/")
 				path = "/" + server_conf.locations[index].index;
-			return getFile(path, server_conf.root);
+			return getFile(path, server_conf.locations[index].root);
 		}
 		return HTTP405;
 	} else if (method == "POST"){
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")){
 			if (path == "/upload") {
-				return handlePost(request, server_conf.root);
+				return handlePostUpload(request, server_conf.locations[index].root);
 			}
+			return handlePost(request, server_conf.locations[index].root);
 		}
 		return HTTP405;
 	} else if (method == "DELETE"){

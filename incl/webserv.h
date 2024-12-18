@@ -23,7 +23,7 @@
 # include "ServerManager.hpp"
 # include "ConfigParser.hpp"
 
-# define HTTP400 "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request1</h1>"
+# define HTTP400 "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<h1>400 Bad Request</h1>"
 # define HTTP401 "HTTP/1.1 401 Unauthorized\r\nContent-Type: text/html\r\n\e\n<h1>401 Unauthorized</h1>"
 # define HTTP402 "HTTP/1.1 402 Payment Required\r\nContent-Type: text/html\r\n\r\n<h1>402 Payment Required</h1>"
 # define HTTP403 "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\n\r\n<h1>403 Forbidden</h1>"
@@ -73,7 +73,7 @@ class ServerManager;
 /**
  * Global variable to manage the server status.
  */
-//static bool running = true;
+static bool running = true;
 
 //*** UTILS ***
 
