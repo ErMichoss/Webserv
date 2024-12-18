@@ -10,6 +10,17 @@ ConfigParser::ConfigParser(char const* fileUrl): file(fileUrl){
 	}
 }
 
+std::string ConfigParser::exctractString(int index, std::string line){
+	std::string str;
+
+	if (this->checkColon(index, line)) return str;
+
+	str = line.substr(index + 1);
+	this->trim(str);
+
+	return str;
+}
+
 /**
  * @brief auxiliar method for the extractServerConf method. It gets the location information from the configuartion file.
  * 
@@ -22,23 +33,15 @@ int ConfigParser::extractLocationConf(Location& location, std::string line){
 	if (line.substr(0, 13) == "CLOSELOCATION") return 2;
 
 	if (line.substr(0, 4) == "root"){
-		std::string root;
+		std::string root = this->exctractString(4, line);
 
-		if (this->checkColon(4, line)) return 1;
-
-		root = line.substr(5);
-		this->trim(root);
-
-		location.root = root;
+		if (root.empty()) return 1;
+		else location.root = root;
 	} else if (line.substr(0, 5) == "index"){
-		std::string index;
-
-		if (this->checkColon(5, line)) return 1;
-
-		index = line.substr(6);
-		this->trim(index);
-
-		location.index = index;
+		std::string index = this->exctractString(5, line);
+		
+		if (index.empty()) return 1;
+		else location.index = index;
 	} else if (line.substr(0, 9) == "autoindex") {
 		std::string aindex;
 
@@ -56,14 +59,10 @@ int ConfigParser::extractLocationConf(Location& location, std::string line){
 			location.autoindex = false;
 		}
 	} else if (line.substr(0, 15) == "redirect_target"){
-		std::string rtarget;
+		std::string redirect_target = this->exctractString(15, line);
 
-		if (this->checkColon(15, line)) return 1;
-
-		rtarget = line.substr(16);
-		this->trim(rtarget);
-
-		location.redirect_target = rtarget;
+		if (redirect_target.empty()) return 1;
+		else location.redirect_target = redirect_target;
 	} else if (line.substr(0, 5) == "limit"){
 		std::vector<std::string> limits;
 
@@ -116,49 +115,31 @@ int ConfigParser::extractServerConf(Server& server, std::string line){
 
 			server.port = atoi(portNum.c_str());
 		} else if (line.substr(0, 4) == "host") {
-			std::string host;
+			std::string host = this->exctractString(4, line);
 
-			if (this->checkColon(4, line)) return 1;
-
-			host = line.substr(5);
-			this->trim(host);
-
-			server.host = host;
+			if (host.empty()) return 1;
+			else server.host = host;
 		} else if (line.substr(0, 11) == "server_name"){
-			std::string snValue;
+			std::string server_name = this->exctractString(11, line);
 
-			if (this->checkColon(11, line)) return 1;
-
-			snValue = line.substr(12);
-			this->trim(snValue);
-
-			server.server_name = snValue;
+			if (server_name.empty()) return 1;
+			else server.server_name = server_name;
 		} else if (line.substr(0, 4) == "root"){
-			std::string root;
+			std::string root = this->exctractString(4, line);
 
-			if (this->checkColon(4, line)) return 1;
-
-			root = line.substr(5);
-			this->trim(root);
-
-			server.root = root;
+			if (root.empty()) return 1;
+			else server.root = root;
 		} else if (line.substr(0, 3) == "cgi"){
-			std::string cgi;
+			std::string cgi = this->exctractString(3, line);
 
-			if (this->checkColon(3, line)) return 1;
-
-			cgi = line .substr(4);
-			this->trim(cgi);
-
-			server.cgi = cgi;
+			if (cgi.empty()) return 1;
+			else server.cgi = cgi;
 		} else if (line.substr(0, 8) == "LOCATION"){
 			Location location;
-			std::string path;
+			std::string path = this->exctractString(8, line);
 
-			if (this->checkColon(8, line)) return 1;
-
-			path = line.substr(9);
-			this->trim(path);
+			if (path.empty()) return 1;
+			else location.path = path;;
 
 			location.path = path;
 

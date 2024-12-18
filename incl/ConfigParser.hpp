@@ -61,6 +61,7 @@ class ConfigParser{
 		//auxiliar methods
 		int extractServerConf(Server& server, std::string line);
 		int extractLocationConf(Location& location, std::string line);
+		std::string exctractString(int index, std::string line);
 
 		/**
 		 * A function to get rid of blanc spaces at the start and end of a string.
