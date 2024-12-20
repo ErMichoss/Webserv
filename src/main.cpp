@@ -68,25 +68,32 @@ int main(int argc, char *argv[]){
 		return 1;
 	}
 	char const* file = argv[1];
+	//mando el archivo de configuracion a la clase para que me lo parsee.
 	ConfigParser ConfigFile(file);
+	//Inicia el parseo del arhivo
 	ConfigFile.addServerConf();
+	//pilla las configuraciones de los servers guardados en la structura server
 	std::vector<ConfigParser::Server> servers_conf = ConfigFile.getServers();
 	std::vector<ServerManager> servers = std::vector<ServerManager>();
 
 	for (size_t i = 0; i < servers_conf.size(); i++){
-		int index = hostport_match(servers, servers_conf[i]);
-		if (index == -1){
+		//Recorro todas las configuraciones
+		int index = hostport_match(servers, servers_conf[i]); // compruebo si ya se ha abierto un servidor con ese mismo host:port
+		//esto lo hago porque si tienen lo mismo el servidor es esencialmente el mismo pero con diferentes configuraciones
+		//para eso sirve el server_name, para si hay mas de un servidor en un mismo host:port saber a cual se esta refiriendo el cliente.
+		if (index == -1){ // Si no hay ningun otro servidor con el mismo host:port creamos un nuevo socket para este servidor
+			//Crea el socker
 			int socketfd = create_socket(servers_conf[i].port, servers_conf[i].host);
-			if (socketfd >= 0){
+			if (socketfd >= 0){// si se crea bien le creo un objeto ServerManager para manejar el servidor,
 				ServerManager server(servers_conf[i], socketfd);
 				servers.push_back(server);
 			} 
 			else { std::cerr << "No se pudo crear el socket para " << servers_conf[i].host << ":" << servers_conf[i].port << std::endl; }
-		} else {
+		} else { // Si ya existe simplemente se lo añado a el objeto con el que tenga el mismo host:port
 			servers[index].addConf(servers_conf[i]);
 		}
 	}
-
+	//inicio los servers
 	for (size_t i = 0; i < servers.size(); i++){
 		servers[i].startServer();
 	}

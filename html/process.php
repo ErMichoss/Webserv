@@ -9,14 +9,16 @@
     <h1>Formulario en PHP</h1>
 
     <?php
+	//Basicamente lo que esto hace es que pillo los datos que el cliente meta en las textbox y cunado se envie el boton enviar pues deberia actualizar la pagina
+	// con los datos enviados.
         if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // Asegurarse de que los datos estén presentes
             $nombre = htmlspecialchars($_POST['nombre'] ?? '');
             $edad = htmlspecialchars($_POST['edad'] ?? '');
 
-            echo "<h2>Datos recibidos:</h2>";
-            echo "<p>Nombre: $nombre</p>";
-            echo "<p>Edad: $edad</p>";
+            echo "<h2>Datos recibidos:</h2><br>";
+            echo "<p>Nombre: $nombre</p><br>";
+            echo "<p>Edad: $edad</p><br>";
         }
     ?>
 
