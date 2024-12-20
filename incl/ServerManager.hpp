@@ -24,11 +24,9 @@ class ServerManager{
 	private:
 		//Private Methods
 		std::string handle_request(std::string const request, ConfigParser::Server server_conf);
-		std::string getFile(std::string request_path, std::string server_root);
+		std::string getFile(std::string request_path, std::string server_root, std::string cgi);
 		std::string handlePostUpload(std::string request, std::string server_root);
-		std::string handlePost(std::string request, std::string server_root);
-		std::map<std::string, std::string> getBodyData(std::string body, std::string content_type);
-		std::map<std::string, std::string> getMultipartFormData(std::string request);
+		std::string handlePost(std::string request, std::string request_path, std::string server_root);
 		ConfigParser::Server getServerName(std::string request);
 		int checkLimits(std::vector<std::string> limits, std::string search) const;
 };
