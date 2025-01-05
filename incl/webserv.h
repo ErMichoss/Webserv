@@ -23,6 +23,8 @@
 # include <pthread.h>
 # include <semaphore.h>
 # include <functional>
+# include <condition_variable>
+# include <mutex>
 # include "ServerManager.hpp"
 # include "ConfigParser.hpp"
 

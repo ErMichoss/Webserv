@@ -2,6 +2,7 @@
 
 //static bool running = true;
 sem_t semaphore; 
+
 /**
  * @brief The constructor for the ServerManager class
  */
@@ -17,18 +18,7 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
     }
 }
 
-ServerManager::~ServerManager() {
-	// Signalizar al hilo para que se detenga
-    sem_wait(&semaphore); // Bloquear el hilo principal
-    running = false;
-    sem_post(&semaphore); // Desbloquear el hilo
-
-    // Esperar a que el hilo termine
-    pthread_join(monitor_thread, nullptr);
-
-    // Destruir el semáforo
-    sem_close(&semaphore);
-}
+ServerManager::~ServerManager() {}
 
 /**
  * @brief The handlePost function handles HTTP POST requests containing file data sent by the client.
@@ -57,16 +47,15 @@ void* ServerManager::monitor_exit_command_static(void* arg) {
 
 void ServerManager::monitor_exit_command() {
     std::string input;
-    while (true) {
+    while (running) {
         std::getline(std::cin, input);
         if (input == "exit") {
             std::cout << "Exit command received. Shutting down server...\n";
-            sem_wait(&semaphore); 
-            running = false; 
-            sem_post(&semaphore);
-            break; 
+			running = false;
+			break;
         }
     }
+    exit(1); 
 }
 
 std::string ServerManager::handlePostUpload(std::string request, std::string server_root) {
@@ -342,13 +331,11 @@ void ServerManager::startServer(){
 		//&fds[0] Es un puntero al primer elemento del vector de estructuras pollfd
 		//fds.size() Es el numero de elementos del vector
 		//-1 indica el tiempo que esperara poll como el valor es -1 esperara indefinidamente
-		sem_wait(&semaphore); 
 		if (!running) {
 			// si se ha presionado el ctrl-C sale del bucle o exit.
 			std::cout << "Exiting server...\n";
 			break;
-		}
-		sem_post(&semaphore); // Desbloquear después de verificar	
+		}	
 		//si hay un error con poll Salgo
 		if (count < 0){
 			std::cerr << "Error en poll: ";
