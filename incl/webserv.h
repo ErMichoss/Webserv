@@ -23,8 +23,11 @@
 # include <pthread.h>
 # include <semaphore.h>
 # include <functional>
-# include <condition_variable>
-# include <mutex>
+# include <cstdio>
+# include <algorithm>
+# include <string>
+# include <sys/wait.h>
+# include <cstring>
 # include "ServerManager.hpp"
 # include "ConfigParser.hpp"
 
@@ -100,6 +103,15 @@ int onlySpace(std::string str);
  * @return On success the index of the server that the hostport matches, on failure -1.
  */
 int hostport_match(std::vector<ServerManager>& servers, ConfigParser::Server server_conf);
+
+/**
+ * @brief Basic itoa for decimals
+ * 
+ * @param n de number its going to turn to a std::string
+ * 
+ * @return The number on a std::string format;
+ */
+std::string ft_atoi(std::size_t n);
 
 //*** SIGNALS ***
 

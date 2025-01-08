@@ -31,3 +31,18 @@ int hostport_match(std::vector<ServerManager>& servers, ConfigParser::Server ser
 	}
 	return exit;
 }
+
+std::string ft_atoi(std::size_t n){
+	std::string str;
+
+    do {
+        size_t digit = n % 10;
+        str += ('0' + digit);
+        n /= 10;
+    } while (n > 0);
+
+    // Invertir la cadena para obtener el orden correcto
+    std::reverse(str.begin(), str.end());
+
+	return str;
+}

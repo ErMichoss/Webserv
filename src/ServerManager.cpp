@@ -10,7 +10,7 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
     this->server_confs.push_back(server_conf);
     this->server_fd = socket;
 
-    int ret = pthread_create(&monitor_thread, nullptr, &ServerManager::monitor_exit_command_static, this); 
+    int ret = pthread_create(&monitor_thread, NULL, &ServerManager::monitor_exit_command_static, this); 
     if (ret != 0) {
         std::cerr << "Error al crear el hilo: " << strerror(ret) << std::endl;
         // Manejar el error (por ejemplo, salir del programa)
@@ -42,7 +42,7 @@ ServerManager::~ServerManager() {}
 void* ServerManager::monitor_exit_command_static(void* arg) {
     ServerManager* this_ptr = static_cast<ServerManager*>(arg);
     this_ptr->monitor_exit_command(); 
-	return nullptr;
+	return NULL;
 }
 
 void ServerManager::monitor_exit_command() {
@@ -171,10 +171,12 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
     setenv("REQUEST_METHOD", "POST", 1);
     setenv("CONTENT_TYPE", content_type.c_str(), 1);
     setenv("CONTENT_LENGTH", content_length.c_str(), 1);
-	setenv("REDIRECT_STATUS", "1", 1);
     setenv("SCRIPT_FILENAME", (server_root + request_path).c_str(), 1);
+	setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
+	setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
+	setenv("REDIRECT_STATUS", "1", 1);
 
-    std::string command = "php-cgi " + server_root + request_path; // guardo el comando que voy a ejecutar
+    std::string command = "php-cgi " + server_root + request_path + " > temp.html"; // guardo el comando que voy a ejecutar
     FILE* pipe = popen(command.c_str(), "w"); // inicio el proceso en modo escritura si falla envio un error 500
     if (!pipe) {
         return HTTP500;
@@ -185,19 +187,32 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
 	//Devulevo un error 500, si todo va bien devuelvo lo que el .php genero como resultaod. ;D
     std::string body = request.substr(header_end + 4);
     fwrite(body.c_str(), sizeof(char), body.size(), pipe);
-
     fflush(pipe);
-
-    char buffer[BUFFER_SIZE];
-    std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
-    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-        response += buffer;
-    }
-
     int exit_code = pclose(pipe);
     if (exit_code != 0) {
         return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nError al ejecutar PHP.";
     }
+
+
+	std::ifstream file("temp.html", std::ios::in | std::ios::binary);
+    if (!file) {
+        return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nError al ejecutar PHP (archivo).";
+    }
+	std::string response = "HTTP/1.1 200 OK\r\n";
+	std::string aux;
+	std::string line;
+	while (std::getline(file, line)){
+		aux += line + "\n";
+	}
+	file.close();
+	std::remove("temp.html");
+	header_end = aux.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        return HTTP400;
+    }
+	std::string content = aux.substr(header_end);
+	response += "Content-Length:" + ft_atoi(std::strlen(content.c_str())) + "\r\n";
+	response += aux;
 
     return response;
 }
@@ -218,7 +233,7 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 	//Si al el archivo es .php y el servidor tiene puesto cgi: "php" pues ejecuta el archivo .php que es esencialmente ejecutar un script en la terminal
 	// con el comnado php-cgi y te lo devuelve ahi en es STDOUT
 	if (path.find(".php") != std::string::npos && !cgi.empty()){
-		std::string command = "php-cgi " + path; //Aquie el comando que vamos a ejecutar que es php-cgi 'espacio' el espacio es importante y leugo la ruta donde esta el
+		std::string command = "php-cgi " + path; //Aqui el comando que vamos a ejecutar que es php-cgi 'espacio' el espacio es importante y leugo la ruta donde esta el
 		//archivo que quiero ejecutar
 
 		FILE* pipe = popen(command.c_str(), "r"); //popen lo que hace es abrir un proceso para uq ejecute el comando anterior
@@ -226,7 +241,7 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 			return HTTP500;
 		
 		char buffer[BUFFER_SIZE];
-		std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; //cabecera de la respuesta
+		std::string response = "HTTP/1.1 200 OK\r\n"; //cabecera de la respuesta
 
 		while (fgets(buffer, sizeof(buffer), pipe) != NULL) //Vamos leyendo el resultado de la ejecucion del comando para guardarlo en un string y pasarselo al cliente
 			response += buffer;
@@ -249,6 +264,7 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 	}
 	
 	close(fd); //cierro el archivo
+	std::cout << response << std::endl;
 	return response; //devuelvo la respuesta.
 }
 
