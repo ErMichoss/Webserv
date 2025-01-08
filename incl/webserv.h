@@ -78,6 +78,7 @@
 
 class ServerManager;
 
+extern char **environ;
 /**
  * Global variable to manage the server status.
  */
@@ -111,7 +112,7 @@ int hostport_match(std::vector<ServerManager>& servers, ConfigParser::Server ser
  * 
  * @return The number on a std::string format;
  */
-std::string ft_atoi(std::size_t n);
+std::string ft_itoa(std::size_t n);
 
 //*** SIGNALS ***
 

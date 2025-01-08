@@ -32,7 +32,7 @@ int hostport_match(std::vector<ServerManager>& servers, ConfigParser::Server ser
 	return exit;
 }
 
-std::string ft_atoi(std::size_t n){
+std::string ft_itoa(std::size_t n){
 	std::string str;
 
     do {
