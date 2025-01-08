@@ -1,6 +1,7 @@
 #include "webserv.h"
 #include "ConfigParser.hpp"
 #include "ServerManager.hpp"
+#include <functional>
 
 /**
  * @brief Creates a socket for a port and host of your choice.

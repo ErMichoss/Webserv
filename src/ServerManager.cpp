@@ -1,14 +1,24 @@
 #include "ServerManager.hpp"
 
 //static bool running = true;
+sem_t semaphore; 
 
 /**
  * @brief The constructor for the ServerManager class
  */
-ServerManager::ServerManager(ConfigParser::Server server_conf, int socket){
-	this->server_confs.push_back(server_conf);
-	this->server_fd = socket;
+ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
+    this->server_confs.push_back(server_conf);
+    this->server_fd = socket;
+
+    int ret = pthread_create(&monitor_thread, nullptr, &ServerManager::monitor_exit_command_static, this); 
+    if (ret != 0) {
+        std::cerr << "Error al crear el hilo: " << strerror(ret) << std::endl;
+        // Manejar el error (por ejemplo, salir del programa)
+        exit(1); 
+    }
 }
+
+ServerManager::~ServerManager() {}
 
 /**
  * @brief The handlePost function handles HTTP POST requests containing file data sent by the client.
@@ -28,6 +38,26 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket){
  * 
  * @returns on failure a Error Message with its coresponding id, on success a Success Message with its coresponding id.
  */
+
+void* ServerManager::monitor_exit_command_static(void* arg) {
+    ServerManager* this_ptr = static_cast<ServerManager*>(arg);
+    this_ptr->monitor_exit_command(); 
+	return nullptr;
+}
+
+void ServerManager::monitor_exit_command() {
+    std::string input;
+    while (running) {
+        std::getline(std::cin, input);
+        if (input == "exit") {
+            std::cout << "Exit command received. Shutting down server...\n";
+			running = false;
+			break;
+        }
+    }
+    exit(1); 
+}
+
 std::string ServerManager::handlePostUpload(std::string request, std::string server_root) {
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
@@ -296,23 +326,22 @@ void ServerManager::startServer(){
     signal(SIGTERM, handle_signal);
 
 	//Bucle principal
-	while (1) {
-
+	while (running) {
 		int count = poll(&fds[0], fds.size(), -1); // esto comprueba que hay eventos en los file descriptors
 		//&fds[0] Es un puntero al primer elemento del vector de estructuras pollfd
 		//fds.size() Es el numero de elementos del vector
 		//-1 indica el tiempo que esperara poll como el valor es -1 esperara indefinidamente
-
-		if (!running) // si se ha presionado el ctrl-C sale del bucle.
+		if (!running) {
+			// si se ha presionado el ctrl-C sale del bucle o exit.
+			std::cout << "Exiting server...\n";
 			break;
-		
+		}	
 		//si hay un error con poll Salgo
 		if (count < 0){
 			std::cerr << "Error en poll: ";
 			perror("poll");
 			break;
 		}
-
 		//bucle de conexiones
 		for (size_t i = 0; i < fds.size(); i++){
 			if (fds[i].revents & POLLIN){
