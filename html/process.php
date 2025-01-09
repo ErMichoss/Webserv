@@ -7,6 +7,18 @@
 <body>
     <h1>Formulario en PHP</h1>
 
+
+    <h2>Completa el formulario</h2>
+    <form action="process.php" method="post" enctype="application/x-www-form-urlencoded">
+        <label for="nombre">Nombre:</label>
+        <input type="text" id="nombre" name="nombre" required>
+        <br><br>
+        <label for="edad">Edad:</label>
+        <input type="text" id="edad" name="edad" required>
+        <br><br>
+        <button type="submit">Enviar</button>
+    </form>
+
     <?php
 	//Basicamente lo que esto hace es que pillo los datos que el cliente meta en las textbox y cunado se envie el boton enviar pues deberia actualizar la pagina
 	// con los datos enviados.
@@ -20,16 +32,6 @@
             echo "<p>Edad: $edad</p><br>";
         }
     ?>
-
-    <h2>Completa el formulario</h2>
-    <form action="process.php" method="post" enctype="application/x-www-form-urlencoded">
-        <label for="nombre">Nombre:</label>
-        <input type="text" id="nombre" name="nombre" required>
-        <br><br>
-        <label for="edad">Edad:</label>
-        <input type="text" id="edad" name="edad" required>
-        <br><br>
-        <button type="submit">Enviar</button>
-    </form>
+	
 </body>
 </html>
