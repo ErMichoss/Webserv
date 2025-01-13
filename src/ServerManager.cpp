@@ -39,6 +39,13 @@ void ServerManager::monitor_exit_command() {
     exit(1); 
 }
 
+/**
+ * @brief handle delete request
+ * 
+ * @param request the request recieved
+ * 
+ * @return 200 on success 404 on failure.
+*/
 std::string handle_delete(std::string request){
 	std::size_t pos = request.find(" ") + 1;
 	std::size_t pos_end = request.find(" ", pos);
@@ -51,6 +58,13 @@ std::string handle_delete(std::string request){
 	}
 }
 
+/**
+ * @brief deletes the requested resource
+ * 
+ * @param resource the resource that is going to be deleted.
+ * 
+ * @return true on success false on failure.
+*/
 bool deleteResource(std::string resource){
 	if (std::remove(resource.c_str()) == 0){
 		return true;
@@ -546,4 +560,3 @@ int ServerManager::checkLimits(std::vector<std::string> limits, std::string sear
 	}
 	return exit;
 }
-
