@@ -20,25 +20,6 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
 
 ServerManager::~ServerManager() {}
 
-/**
- * @brief The handlePost function handles HTTP POST requests containing file data sent by the client.
- * 
- * @param request The request that has been sent to the server.
- * @param server_root the path were the servers static files are located.
- * 
- * @details line 1 of the function to line 4 -> find the end of the header, if the delimiter is not found an error 400 is send.
- * line 6 of the function to line 10 -> extract the headers of the request and verify Content-Lenght, if is not present an error 411(Lenght Required) is send.
- * line 12 of the function to line 15 -> verify the content is multipart/form-data, if is not specified an error 415(Unsupported Media Type) is send.
- * line 17 of the function to line 24 -> obtain the multipart delimiter, on failure an error 400 is send.
- * line 26 of the function to line 38 -> extract the request body, on failure an error 400 is send.
- * line 40 of the function to line 46 -> extract the name of the file, on failure an error 400 is send.
- * line 48 of the function to line 53 -> extract the file data, on faiure an error 400 is send.
- * line 55 of the function to line 62 -> save the file in the server.
- * 
- * 
- * @returns on failure a Error Message with its coresponding id, on success a Success Message with its coresponding id.
- */
-
 void* ServerManager::monitor_exit_command_static(void* arg) {
     ServerManager* this_ptr = static_cast<ServerManager*>(arg);
     this_ptr->monitor_exit_command(); 
@@ -58,6 +39,44 @@ void ServerManager::monitor_exit_command() {
     exit(1); 
 }
 
+std::string handle_delete(std::string request){
+	std::size_t pos = request.find(" ") + 1;
+	std::size_t pos_end = request.find(" ", pos);
+	std::string resource = request.substr(pos, pos_end - pos);
+
+	if(deleteResource(resource)){
+		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
+	} else {
+		return HTTP404;
+	}
+}
+
+bool deleteResource(std::string resource){
+	if (std::remove(resource.c_str()) == 0){
+		return true;
+	} else {
+		return false;
+	}
+}
+
+/**
+ * @brief The handlePost function handles HTTP POST requests containing file data sent by the client.
+ * 
+ * @param request The request that has been sent to the server.
+ * @param server_root the path were the servers static files are located.
+ * 
+ * @details line 1 of the function to line 4 -> find the end of the header, if the delimiter is not found an error 400 is send.
+ * line 6 of the function to line 10 -> extract the headers of the request and verify Content-Lenght, if is not present an error 411(Lenght Required) is send.
+ * line 12 of the function to line 15 -> verify the content is multipart/form-data, if is not specified an error 415(Unsupported Media Type) is send.
+ * line 17 of the function to line 24 -> obtain the multipart delimiter, on failure an error 400 is send.
+ * line 26 of the function to line 38 -> extract the request body, on failure an error 400 is send.
+ * line 40 of the function to line 46 -> extract the name of the file, on failure an error 400 is send.
+ * line 48 of the function to line 53 -> extract the file data, on faiure an error 400 is send.
+ * line 55 of the function to line 62 -> save the file in the server.
+ * 
+ * 
+ * @returns on failure a Error Message with its coresponding id, on success a Success Message with its coresponding id.
+ */
 std::string ServerManager::handlePostUpload(std::string request, std::string server_root) {
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
@@ -74,7 +93,7 @@ std::string ServerManager::handlePostUpload(std::string request, std::string ser
     if (content_type_pos == std::string::npos) {
         return HTTP415;
     }
-
+"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
     std::string boundary_prefix = "boundary=";
     std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
     if (boundary_pos == std::string::npos) {

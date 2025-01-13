@@ -31,6 +31,8 @@ class ServerManager{
 		std::string handlePostUpload(std::string request, std::string server_root);
 		std::string handlePost(std::string request, std::string request_path, std::string server_root);
 		ConfigParser::Server getServerName(std::string request);
+		std::string handle_delete(std::string request);
+		bool deleteResource(std::string resource);
 		int checkLimits(std::vector<std::string> limits, std::string search) const;
 };
 
