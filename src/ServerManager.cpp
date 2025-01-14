@@ -9,13 +9,6 @@ sem_t semaphore;
 ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
     this->server_confs.push_back(server_conf);
     this->server_fd = socket;
-
-    int ret = pthread_create(&monitor_thread, NULL, &ServerManager::monitor_exit_command_static, this); 
-    if (ret != 0) {
-        std::cerr << "Error al crear el hilo: " << strerror(ret) << std::endl;
-        // Manejar el error (por ejemplo, salir del programa)
-        exit(1); 
-    }
 }
 
 ServerManager::~ServerManager() {}

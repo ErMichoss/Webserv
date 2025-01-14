@@ -10,6 +10,7 @@ class ServerManager{
 	private:
 		//Atributes
 		std::vector<ConfigParser::Server> server_confs;
+		std::map<int, std::string> errors;
 		int server_fd;
 		pthread_t monitor_thread;
 
