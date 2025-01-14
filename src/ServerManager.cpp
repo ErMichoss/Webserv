@@ -40,16 +40,32 @@ void ServerManager::monitor_exit_command() {
 }
 
 /**
+ * @brief deletes the requested resource
+ * 
+ * @param resource the resource that is going to be deleted.
+ * 
+ * @return true on success false on failure.
+*/
+bool ServerManager::deleteResource(std::string resource){
+	if (std::remove(resource.c_str()) == 0){
+		return true;
+	} else {
+		return false;
+	}
+}
+/**
  * @brief handle delete request
  * 
  * @param request the request recieved
  * 
  * @return 200 on success 404 on failure.
 */
-std::string handle_delete(std::string request){
+std::string ServerManager::handle_delete(std::string root, std::string request){
 	std::size_t pos = request.find(" ") + 1;
 	std::size_t pos_end = request.find(" ", pos);
-	std::string resource = request.substr(pos, pos_end - pos);
+	std::string resource = root;
+	resource += request.substr(pos, pos_end - pos);
+	std::cout << resource << std::endl;
 
 	if(deleteResource(resource)){
 		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
@@ -58,20 +74,6 @@ std::string handle_delete(std::string request){
 	}
 }
 
-/**
- * @brief deletes the requested resource
- * 
- * @param resource the resource that is going to be deleted.
- * 
- * @return true on success false on failure.
-*/
-bool deleteResource(std::string resource){
-	if (std::remove(resource.c_str()) == 0){
-		return true;
-	} else {
-		return false;
-	}
-}
 
 /**
  * @brief The handlePost function handles HTTP POST requests containing file data sent by the client.
@@ -107,7 +109,6 @@ std::string ServerManager::handlePostUpload(std::string request, std::string ser
     if (content_type_pos == std::string::npos) {
         return HTTP415;
     }
-"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
     std::string boundary_prefix = "boundary=";
     std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
     if (boundary_pos == std::string::npos) {
@@ -418,7 +419,7 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 	//EL metodo DELETE no se ni que hace no lo he mirado jsjsjsj :3
 	} else if (method == "DELETE"){
 		//ejecutar DELETE
-		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
+		return handle_delete(server_conf.locations[index].root, request);
 	}
 	//Si no es ningun metodo pues error 405 y pa lante como los de alicante
 	return HTTP405;
