@@ -12,7 +12,6 @@ class ServerManager{
 		std::vector<ConfigParser::Server> server_confs;
 		std::map<int, std::string> errors;
 		int server_fd;
-		//pthread_t monitor_thread;
 
 	public:
 		//Public Methods
@@ -25,8 +24,7 @@ class ServerManager{
 
 	private:
 		//Private Methods
-		static void* monitor_exit_command_static(void* arg);
-    	void monitor_exit_command();
+		void setSocketLinger(int socket_df);
 		std::string handle_request(std::string const request, ConfigParser::Server server_conf);
 		std::string getFile(std::string request_path, std::string server_root, std::string cgi, std::string request);
 		std::string handlePostUpload(std::string request, std::string server_root);

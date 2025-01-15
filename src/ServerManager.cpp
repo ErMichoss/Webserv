@@ -13,23 +13,16 @@ ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
 
 ServerManager::~ServerManager() {}
 
-void* ServerManager::monitor_exit_command_static(void* arg) {
-    ServerManager* this_ptr = static_cast<ServerManager*>(arg);
-    this_ptr->monitor_exit_command(); 
-	return NULL;
-}
+// Configura el socket para cerrar inmediatamente sin esperar a que se envíen los datos pendientes
+void ServerManager::setSocketLinger(int socket_df)
+{
+	struct linger sl;
+	sl.l_onoff = 1;		// Habilitar SO_LINGER
+	sl.l_linger = 0;	// Cerrar inmediatamente sin esperar
 
-void ServerManager::monitor_exit_command() {
-    std::string input;
-    while (running) {
-        std::getline(std::cin, input);
-        if (input == "hola") {
-            std::cout << "Exit command received. Shutting down server...\n";
-			running = false;
-			break;
-        }
-    }
-    exit(1); 
+	if (setsockopt(socket_df, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl)) < 0)
+    	perror("setsockopt(SO_LINGER) failed");
+	//close(socket_df);
 }
 
 /**
@@ -428,17 +421,16 @@ void ServerManager::startServer(){
 	struct pollfd server_pollfd = {this->server_fd, POLLIN, 0};
     fds.push_back(server_pollfd);
 
+	// Añadir STDIN_FILENO al vector de fds para escuchar la entrada de teclado
+	struct pollfd stdin_pollfd = {STDIN_FILENO, POLLIN, 0};
+	fds.push_back(stdin_pollfd);
+
 	//manejo las señales como en minishell para que el ctrl-C no cierre el programa a cascoporro
 	signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
 	//Bucle principal
 	while (running) {
-		std::getline(std::cin, prontf);
-		if (prontf == "exit"){
-			std::cout << "Exiting server...\n";
-			break;
-		}
 		int count = poll(&fds[0], fds.size(), -1); // esto comprueba que hay eventos en los file descriptors
 		//&fds[0] Es un puntero al primer elemento del vector de estructuras pollfd
 		//fds.size() Es el numero de elementos del vector
@@ -457,7 +449,15 @@ void ServerManager::startServer(){
 		//bucle de conexiones
 		for (size_t i = 0; i < fds.size(); i++){
 			if (fds[i].revents & POLLIN){
-				if (fds[i].fd == this->server_fd){ // Si el evento sucede en el fd del servidor es que un cliente se quiere conectar, entonces lo conectamos
+				if (fds[i].fd == STDIN_FILENO) {
+					std::getline(std::cin, prontf);
+					if (prontf == "exit"){
+						std::cout << "Exiting server...\n";
+						running = false;
+						break;
+					}
+				}
+				else if (fds[i].fd == this->server_fd){ // Si el evento sucede en el fd del servidor es que un cliente se quiere conectar, entonces lo conectamos
 					//Nueva conexion
 					//Hasta aqui creo q llegaste tu en el tuyo pero bueno lo explico que no hace daño :D
 					struct sockaddr_in client; // Declaro una estructura sockaddr_in -> Esta estructura se utiliza para alamacenar la dirección
@@ -506,8 +506,23 @@ void ServerManager::startServer(){
 			}
 		}
 	}
-	//Cieroo los sockets
-	close(fds[0].fd);
+	/* // Antes de cerrar el socket del cliente
+	shutdown(fds[0].fd, SHUT_RDWR);
+	ServerManager::setSocketLinger(fds[0].fd);
+	close(fds[0].fd); */
+	// Cerrar sockets de clientes antes de aplicar SO_LINGER
+    for (size_t i = 1; i < fds.size(); i++) {
+        if (fds[i].fd != STDIN_FILENO) {
+            // Cerrar la conexión de forma ordenada antes de aplicar SO_LINGER
+            shutdown(fds[i].fd, SHUT_RDWR);
+            ServerManager::setSocketLinger(fds[i].fd);
+            close(fds[i].fd);
+        }
+    }
+
+	// Antes de cerrar el socket del servidor
+	shutdown(this->server_fd, SHUT_RDWR);
+	ServerManager::setSocketLinger(this->server_fd);
 	close(this->server_fd);
 }
 
