@@ -153,7 +153,7 @@ int ConfigParser::extractServerConf(Server& server, std::string line){
 			}
 
 			server.locations.push_back(location);
-		} else if ( !line.empty() &&line.c_str()[0] != '#') {
+		} else if ( !line.empty() && line.c_str()[0] != '#' && line.substr(0, 10) != "error_page") {
 			std::cerr << "Unexpected line: " << line << std::endl; 
 			return 1;
 		}
@@ -194,16 +194,22 @@ int ConfigParser::addServerConf(){
 				std::getline(this->file, line);
 			}
 			while(std::getline(this->file, line)){
+				this->trim(line);
 				if (line.substr(0, 11) == "CLOSESERVER")
 					break;
 				if (line.substr(0, 10) == "error_page"){
 					std::string error_page = this->exctractString(10, line);
-					int code = atoi(error_page.substr(0, error_page.find(" ")).c_str());
-					std::string body = error_page.substr(error_page.find(" ") + 1);
-					std::stringstream buffer;
-					std::ifstream content(server.root + body, std::ios::binary);
-					buffer << content.rdbuf();
-					server.error_pages[code] = buffer.str();
+					size_t space_pos = error_page.find(" ");
+					int code = atoi(error_page.substr(0, space_pos).c_str());
+					std::string body = error_page.substr(space_pos + 1);
+					std::ifstream content((server.root + "/" + body).c_str(), std::ios::binary);
+					std::string lines;
+					std::string buffer;
+					while (std::getline(content, lines)){
+						buffer += lines;
+					}
+					server.error_pages[code] = buffer;
+				}
 			}
 			this->servers.push_back(server);
 			server.locations.clear();

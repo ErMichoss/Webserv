@@ -55,7 +55,7 @@
 # define HTTP423 "HTTP/1.1 423 Locked\r\nContent-Type: text/html\r\n\r\n"
 # define HTTP424 "HTTP/1.1 424 Failed Dependency\r\nContent-Type: text/html\r\n\r\n"
 # define HTTP426 "HTTP/1.1 426 Upgrade Required\r\nContent-Type: text/html\r\n\r\n"
-# define HTTP428 "HTTP/1.1 428 Precondition Required\r\nContent-Type: text/html\r\n\r\n
+# define HTTP428 "HTTP/1.1 428 Precondition Required\r\nContent-Type: text/html\r\n\r\n"
 # define HTTP429 "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/html\r\n\r\n"
 # define HTTP431 "HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Type: text/html\r\n\r\n"
 # define HTTP451 "HTTP/1.1 451 Unavailable For Legal Reasons\r\nContent-Type: text/html\r\n\r\n"

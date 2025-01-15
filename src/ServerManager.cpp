@@ -89,23 +89,23 @@ std::string ServerManager::handle_delete(std::string root, std::string request){
 std::string ServerManager::handlePostUpload(std::string request, std::string server_root) {
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-        return HTTP400;
+        return HTTP400 + this->active_server.error_pages[400];
     }
 
     std::string headers = request.substr(0, header_end);
     std::size_t content_length_pos = headers.find("Content-Length: ");
     if (content_length_pos == std::string::npos) {
-        return HTTP411;
+        return HTTP411 + this->active_server.error_pages[411];
     }
 
     std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
     if (content_type_pos == std::string::npos) {
-        return HTTP415;
+        return HTTP415 + this->active_server.error_pages[415];
     }
     std::string boundary_prefix = "boundary=";
     std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
     if (boundary_pos == std::string::npos) {
-        return HTTP400;
+        return HTTP400 + this->active_server.error_pages[400];
     }
     std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
     boundary = boundary.substr(0, boundary.find("\r\n"));
@@ -113,26 +113,26 @@ std::string ServerManager::handlePostUpload(std::string request, std::string ser
     std::string body = request.substr(header_end + 4);
     std::size_t file_start = body.find(boundary);
     if (file_start == std::string::npos) {
-        return HTTP400;
+        return HTTP400 + this->active_server.error_pages[400];
     }
     file_start += boundary.size() + 2;
 
     std::size_t file_end = body.find(boundary, file_start);
     if (file_end == std::string::npos) {
-        return HTTP400;
+        return HTTP400 + this->active_server.error_pages[400];
     }
     std::string file_content = body.substr(file_start, file_end - file_start);
 
     std::size_t filename_pos = file_content.find("filename=\"");
     if (filename_pos == std::string::npos) {
-        return HTTP400;
+        return HTTP400 + this->active_server.error_pages[400];
     }
     std::string filename = file_content.substr(filename_pos + 10);
     filename = filename.substr(0, filename.find("\""));
 
     std::size_t data_start = file_content.find("\r\n\r\n");
     if (data_start == std::string::npos) {
-        return HTTP400;
+        return HTTP400 + this->active_server.error_pages[400];
     }
     data_start += 4;
     std::string file_data = file_content.substr(data_start);
@@ -140,7 +140,7 @@ std::string ServerManager::handlePostUpload(std::string request, std::string ser
     std::string file_path = server_root + "/" + filename;
     int fd = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
     if (fd < 0) {
-        return HTTP500;
+        return HTTP500 + this->active_server.error_pages[500];
     }
     write(fd, file_data.c_str(), file_data.size());
     close(fd);
@@ -164,14 +164,14 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
 	//Busco el fin de la cabecera HTTP si no lo encuentro envio un error 400
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-        return HTTP400;
+        return HTTP400 + this->active_server.error_pages[400];
     }
 
 	//Busco en la cabecera donde esta el tamaño del contendio que se envia, si no esta envio un error 411
     std::string headers = request.substr(0, header_end);
     std::size_t content_length_pos = headers.find("Content-Length: "); //guardo la posicion
     if (content_length_pos == std::string::npos) {
-        return HTTP411;
+        return HTTP411 + this->active_server.error_pages[411];
     }
 
 	//Esto de aqui me guarda literalmente el contendo de content_lenght, es decir, si ocupa 128 pues guado eso 128
@@ -184,7 +184,7 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
 	//Busco en la cabecera donde estan el tipo de datos que contiene el cuerpo de la petiocion, si no esta envion un error 415
     std::size_t content_type_pos = headers.find("Content-Type: ");
     if (content_type_pos == std::string::npos) {
-        return HTTP415;
+        return HTTP415 + this->active_server.error_pages[415];
     }
 
 	//Esto me gurad literalmente el contenido de Content-Type.
@@ -244,7 +244,7 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
     header_end = output.find("\r\n\r\n"); // Buscar el fin de los encabezados
     if (header_end == std::string::npos) {
         std::cerr << "Respuesta PHP malformada." << std::endl;
-        return HTTP500;
+        return HTTP500 + this->active_server.error_pages[500];
     }
 
 	headers.clear();
@@ -326,7 +326,7 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 			waitpid(pid, &status, 0); // Wait for child process to finish
 			std::size_t header_end = aux.find("\r\n\r\n");
 			if (header_end == std::string::npos) {
-				return HTTP400;
+				return HTTP400 + this->active_server.error_pages[400];
 			}
 			std::string content = aux.substr(header_end + 4);
 			response += "Connection: close\r\n";
@@ -341,10 +341,11 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 
 	int fd = open(path.c_str(), O_RDONLY); //abro el archivo normal si no puedo leerlo mando error 400
 	if (fd < 0){
-		return HTTP400;
+		return HTTP400 + this->active_server.error_pages[400];
 	}
 
 	char buffer[BUFFER_SIZE];
+	//std::string extension; //= funcion extension
 	std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n"; //cabecera de la respuesta
 	std::string content;
 	ssize_t bytes;
@@ -395,7 +396,7 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 				path = "/" + server_conf.locations[index].index;
 			return getFile(path, server_conf.locations[index].root, server_conf.cgi, request); //Aqui es donde sucede toda la magia del archivo 
 		}
-		return HTTP405;
+		return HTTP405 + this->active_server.error_pages[405];
 	//El metodo POST hace muchas cosas de momento lo que tengo hecho 100% es subir archivos al servidor lo otro esta a casi.
 	} else if (method == "POST"){
 		//Compruebo que se pueda hacer POST en la ruta desde la q se pidio si no pues no se hace y devuelve un error 405
@@ -408,14 +409,14 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 			//Ejemplo del html es el archivo process.php en la carpeta explcio mas en detalle lo que tiene que hacer alli.
 			return handlePost(request, path, server_conf.locations[index].root); // mas magia pero no funciona del todo
 		}
-		return HTTP405;
+		return HTTP405 + this->active_server.error_pages[405];
 	//EL metodo DELETE no se ni que hace no lo he mirado jsjsjsj :3
 	} else if (method == "DELETE"){
 		//ejecutar DELETE
 		return handle_delete(server_conf.locations[index].root, request);
 	}
 	//Si no es ningun metodo pues error 405 y pa lante como los de alicante
-	return HTTP405;
+	return HTTP405 + this->active_server.error_pages[405];
 }
 
 /**
@@ -480,7 +481,8 @@ void ServerManager::startServer(){
 					std::memset(buffer, 0, sizeof(buffer));
 					ssize_t bytes = read(fds[i].fd, buffer, sizeof(buffer)); //Leeo la peticion entera enciada por el cliente
 					if (bytes > 0){ //Si bien la manejamos
-						ConfigParser::Server server_conf = getServerName(std::string(buffer, bytes)); // Esto es lo que mencione de variios servidores escucharndo
+						ConfigParser::Server server_conf = getServerName(std::string(buffer, bytes));
+						this->active_server = server_conf; // Esto es lo que mencione de variios servidores escucharndo
 						//Al mismo host:port basicamente pillo la configuracion del servidor que llama el cliente
 						std::string const response = handle_request(std::string(buffer, bytes), server_conf); // Y aqui pasa la magia
 						send(fds[i].fd, response.c_str(), strlen(response.c_str()), 0);// Aqui Envio la repuesta al cliente
