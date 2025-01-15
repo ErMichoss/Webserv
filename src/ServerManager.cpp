@@ -9,16 +9,64 @@ sem_t semaphore;
 ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
     this->server_confs.push_back(server_conf);
     this->server_fd = socket;
-
-    int ret = pthread_create(&monitor_thread, nullptr, &ServerManager::monitor_exit_command_static, this); 
-    if (ret != 0) {
-        std::cerr << "Error al crear el hilo: " << strerror(ret) << std::endl;
-        // Manejar el error (por ejemplo, salir del programa)
-        exit(1); 
-    }
 }
 
 ServerManager::~ServerManager() {}
+
+void* ServerManager::monitor_exit_command_static(void* arg) {
+    ServerManager* this_ptr = static_cast<ServerManager*>(arg);
+    this_ptr->monitor_exit_command(); 
+	return NULL;
+}
+
+void ServerManager::monitor_exit_command() {
+    std::string input;
+    while (running) {
+        std::getline(std::cin, input);
+        if (input == "hola") {
+            std::cout << "Exit command received. Shutting down server...\n";
+			running = false;
+			break;
+        }
+    }
+    exit(1); 
+}
+
+/**
+ * @brief deletes the requested resource
+ * 
+ * @param resource the resource that is going to be deleted.
+ * 
+ * @return true on success false on failure.
+*/
+bool ServerManager::deleteResource(std::string resource){
+	if (std::remove(resource.c_str()) == 0){
+		return true;
+	} else {
+		return false;
+	}
+}
+/**
+ * @brief handle delete request
+ * 
+ * @param request the request recieved
+ * 
+ * @return 200 on success 404 on failure.
+*/
+std::string ServerManager::handle_delete(std::string root, std::string request){
+	std::size_t pos = request.find(" ") + 1;
+	std::size_t pos_end = request.find(" ", pos);
+	std::string resource = root;
+	resource += request.substr(pos, pos_end - pos);
+	std::cout << resource << std::endl;
+
+	if(deleteResource(resource)){
+		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
+	} else {
+		return HTTP404;
+	}
+}
+
 
 /**
  * @brief The handlePost function handles HTTP POST requests containing file data sent by the client.
@@ -38,26 +86,6 @@ ServerManager::~ServerManager() {}
  * 
  * @returns on failure a Error Message with its coresponding id, on success a Success Message with its coresponding id.
  */
-
-void* ServerManager::monitor_exit_command_static(void* arg) {
-    ServerManager* this_ptr = static_cast<ServerManager*>(arg);
-    this_ptr->monitor_exit_command(); 
-	return nullptr;
-}
-
-void ServerManager::monitor_exit_command() {
-    std::string input;
-    while (running) {
-        std::getline(std::cin, input);
-        if (input == "exit") {
-            std::cout << "Exit command received. Shutting down server...\n";
-			running = false;
-			break;
-        }
-    }
-    exit(1); 
-}
-
 std::string ServerManager::handlePostUpload(std::string request, std::string server_root) {
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
@@ -74,7 +102,6 @@ std::string ServerManager::handlePostUpload(std::string request, std::string ser
     if (content_type_pos == std::string::npos) {
         return HTTP415;
     }
-
     std::string boundary_prefix = "boundary=";
     std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
     if (boundary_pos == std::string::npos) {
@@ -133,7 +160,7 @@ std::string ServerManager::handlePostUpload(std::string request, std::string ser
 */
 std::string ServerManager::handlePost(std::string request, std::string request_path, std::string server_root) {
 	//Esta funcion es la que no me funciona del todo que bueno no se porque el problema es q me envia la respuesta a la terminal en vez del navegador
-
+	std::cout << "Entra al POST" << std::endl;
 	//Busco el fin de la cabecera HTTP si no lo encuentro envio un error 400
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
@@ -167,38 +194,70 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
         content_type = content_type.substr(0, content_type_end);
     }
 
-	//Pongo las variables de entorno necesitadas por el cgi para ejecutar el scrip de php
+	//Pongo las variables de entorno necesitadas por el cgi para ejecutar el script de php
     setenv("REQUEST_METHOD", "POST", 1);
-    setenv("CONTENT_TYPE", content_type.c_str(), 1);
-    setenv("CONTENT_LENGTH", content_length.c_str(), 1);
-	setenv("REDIRECT_STATUS", "1", 1);
+    setenv("CONTENT_TYPE", content_type.c_str(), 1); // Ajusta según sea necesario
+    setenv("CONTENT_LENGTH", content_length.c_str() , 1); // Ajusta según sea necesario
     setenv("SCRIPT_FILENAME", (server_root + request_path).c_str(), 1);
+    setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
+    setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
+    setenv("REDIRECT_STATUS", "1", 1);
 
-    std::string command = "php-cgi " + server_root + request_path; // guardo el comando que voy a ejecutar
-    FILE* pipe = popen(command.c_str(), "w"); // inicio el proceso en modo escritura si falla envio un error 500
-    if (!pipe) {
+	std::string body = request.substr(header_end + 4);
+
+    // Crear un pipe para capturar la salida del proceso PHP
+	int fd_read[2];
+	int fd_write[2];
+	pipe(fd_read);
+	pipe(fd_write);
+	pid_t pid = fork();
+	if (pid == 0){
+		char* matriz[2];
+		matriz[0] = (char *)"php-cgi";
+		matriz[1] = NULL;
+		dup2(fd_read[1], 1);
+		close(fd_read[0]);
+		close(fd_read[1]);
+		dup2(fd_write[0], 0);
+		close(fd_write[1]);
+		close(fd_write[0]);
+		execve("/usr/bin/php-cgi", matriz, environ);
+		exit(EXIT_FAILURE);
+	}
+	close(fd_write[0]);
+	write(fd_write[1], body.c_str(), body.size());
+	close(fd_write[1]);
+	close(fd_read[1]);
+	std::string output;
+	char buffer[1024];
+	std::memset(buffer, 0, 1024);
+	while (read(fd_read[0], buffer, 1023) > 0){
+		output.append(buffer);
+		std::memset(buffer, 0, 1024);
+	}
+	close(fd_read[0]);
+	//waitpid(pid, NULL, 0);
+
+	//std::cout << "Llega" << std::endl;
+
+    // Procesar la salida generada por PHP
+    header_end = output.find("\r\n\r\n"); // Buscar el fin de los encabezados
+    if (header_end == std::string::npos) {
+        std::cerr << "Respuesta PHP malformada." << std::endl;
         return HTTP500;
     }
-	//Esto de aqui es un poco mas complejo pero voy a intentar explicarlo lo mejor posible
-	//Basicamente tomo el contenido de la solicitud y lo envio al programa/script de php para que lo procese. Luego
-	//recojo lo que ese programa responde y lo uso para crear la respuesta que sera enviada al cliente. Si algo falla al ejecutar el programa
-	//Devulevo un error 500, si todo va bien devuelvo lo que el .php genero como resultaod. ;D
-    std::string body = request.substr(header_end + 4);
-    fwrite(body.c_str(), sizeof(char), body.size(), pipe);
 
-    fflush(pipe);
+	headers.clear();
+    headers = output.substr(0, header_end);
+    std::string content = output.substr(header_end + 4); // El contenido es todo lo que sigue
 
-    char buffer[BUFFER_SIZE];
-    std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
-    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-        response += buffer;
-    }
-
-    int exit_code = pclose(pipe);
-    if (exit_code != 0) {
-        return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nError al ejecutar PHP.";
-    }
-
+    // Crear la respuesta HTTP
+    std::string response = "HTTP/1.1 200 OK\r\n";
+    response += headers + "\r\n";
+	response += "Connection: close\r\n";
+    response += "Content-Length: " + ft_itoa(content.size()) + "\r\n\r\n"; // Convertir tamaño a cadena
+    response += content;
+	std::cout << "Sale del POST" << std::endl;
     return response;
 }
 
@@ -211,29 +270,73 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
  * 
  * @return a std::string of the static file contents.
  */
-std::string ServerManager::getFile(std::string request_path, std::string server_root, std::string cgi){
+std::string ServerManager::getFile(std::string request_path, std::string server_root, std::string cgi, std::string request){
 	//Aqui pues saco la ruta absoluta de donde estan las cosas en el server
 	std::string path = server_root + request_path;
-
+	std::cout << "Entra al GET" << std::endl;
 	//Si al el archivo es .php y el servidor tiene puesto cgi: "php" pues ejecuta el archivo .php que es esencialmente ejecutar un script en la terminal
 	// con el comnado php-cgi y te lo devuelve ahi en es STDOUT
-	if (path.find(".php") != std::string::npos && !cgi.empty()){
-		std::string command = "php-cgi " + path; //Aquie el comando que vamos a ejecutar que es php-cgi 'espacio' el espacio es importante y leugo la ruta donde esta el
-		//archivo que quiero ejecutar
+	if (path.find(".php") != std::string::npos && !cgi.empty()) {
+		unsetenv("CONTENT_TYPE");
+		unsetenv("CONTENT_LENGTH");
+		setenv("REQUEST_METHOD", "GET", 1);
+		setenv("SCRIPT_FILENAME", path.c_str(), 1);
+		setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
+		setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
+		setenv("REDIRECT_STATUS", "1", 1);
+		size_t start = request.find_first_of('?');
+		size_t end = request.find_first_of(' ', start);
+		std::string quri = request.substr(start, end - start);
+		setenv("QUERY_STRING", quri.c_str(), 1);
 
-		FILE* pipe = popen(command.c_str(), "r"); //popen lo que hace es abrir un proceso para uq ejecute el comando anterior
-		if (!pipe)
+		int pipe_fd[2];
+		if (pipe(pipe_fd) == -1) {
 			return HTTP500;
-		
-		char buffer[BUFFER_SIZE];
-		std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; //cabecera de la respuesta
+		}
 
-		while (fgets(buffer, sizeof(buffer), pipe) != NULL) //Vamos leyendo el resultado de la ejecucion del comando para guardarlo en un string y pasarselo al cliente
-			response += buffer;
+		pid_t pid = fork();
+		if (pid == -1) {
+			return HTTP500;
+		}
 
-		pclose(pipe); //cierro el proceso
-		//devuelvo la respuesta que en este caso es el archivo .php
-		return response;
+		if (pid == 0) { // Child process
+			close(pipe_fd[0]); // Close read end
+			dup2(pipe_fd[1], STDOUT_FILENO); // Redirect stdout to write end of the pipe
+			close(pipe_fd[1]); // Close original write end
+
+			std::string command = "/usr/bin/php-cgi"; // Command to execute
+			char *const args[] = {const_cast<char *>(command.c_str()), const_cast<char *>(path.c_str()), NULL};
+
+			execve(args[0], args, environ); // Execute php-cgi
+			exit(1); // Exit if execvp fails
+		} else { // Parent process
+			close(pipe_fd[1]); // Close write end
+
+			char buffer[BUFFER_SIZE];
+			std::string response = "HTTP/1.1 200 OK\r\n"; // Response header
+			std::string aux;
+
+			ssize_t bytes_read;
+			while ((bytes_read = read(pipe_fd[0], buffer, sizeof(buffer))) > 0) {
+				aux.append(buffer, bytes_read);
+			}
+			close(pipe_fd[0]); // Close read end
+
+			int status;
+			waitpid(pid, &status, 0); // Wait for child process to finish
+			std::size_t header_end = aux.find("\r\n\r\n");
+			if (header_end == std::string::npos) {
+				return HTTP400;
+			}
+			std::string content = aux.substr(header_end + 4);
+			response += "Connection: close\r\n";
+			response += "Content-Length:" + ft_itoa(std::strlen(content.c_str())) + "\r\n";
+			response += aux;
+
+			// Return the response, which in this case is the .php file output
+			std::cout << "Sale del GET" << std::endl;
+			return response;
+		}
 	}
 
 	int fd = open(path.c_str(), O_RDONLY); //abro el archivo normal si no puedo leerlo mando error 400
@@ -242,11 +345,14 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 	}
 
 	char buffer[BUFFER_SIZE];
-	std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; //cabecera de la respuesta
+	std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n"; //cabecera de la respuesta
+	std::string content;
 	ssize_t bytes;
 	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0){//Vamos leyendo los contenido del archivo y metiendolos en las respuestas 
-		response.append(buffer, bytes);
+		content.append(buffer, bytes);
 	}
+	response += "Content-Length:" + ft_itoa(std::strlen(content.c_str())) + "\r\n\r\n";
+	response += content;
 	
 	close(fd); //cierro el archivo
 	return response; //devuelvo la respuesta.
@@ -287,7 +393,7 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")){
 			if (path == "/") //Si el path es el raiz devuelvo el index que tenga el locations por defecto
 				path = "/" + server_conf.locations[index].index;
-			return getFile(path, server_conf.locations[index].root, server_conf.cgi); //Aqui es donde sucede toda la magia del archivo 
+			return getFile(path, server_conf.locations[index].root, server_conf.cgi, request); //Aqui es donde sucede toda la magia del archivo 
 		}
 		return HTTP405;
 	//El metodo POST hace muchas cosas de momento lo que tengo hecho 100% es subir archivos al servidor lo otro esta a casi.
@@ -306,7 +412,7 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 	//EL metodo DELETE no se ni que hace no lo he mirado jsjsjsj :3
 	} else if (method == "DELETE"){
 		//ejecutar DELETE
-		return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
+		return handle_delete(server_conf.locations[index].root, request);
 	}
 	//Si no es ningun metodo pues error 405 y pa lante como los de alicante
 	return HTTP405;
@@ -316,6 +422,7 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
  * @brief Starts the server so it can handle request and connections.
  */
 void ServerManager::startServer(){
+	std::string prontf;
 	//Creo mi estructura de pollfd y meto el socket del servidor
 	std::vector<struct pollfd> fds;
 	struct pollfd server_pollfd = {this->server_fd, POLLIN, 0};
@@ -327,6 +434,11 @@ void ServerManager::startServer(){
 
 	//Bucle principal
 	while (running) {
+		std::getline(std::cin, prontf);
+		if (prontf == "exit"){
+			std::cout << "Exiting server...\n";
+			break;
+		}
 		int count = poll(&fds[0], fds.size(), -1); // esto comprueba que hay eventos en los file descriptors
 		//&fds[0] Es un puntero al primer elemento del vector de estructuras pollfd
 		//fds.size() Es el numero de elementos del vector
@@ -448,4 +560,3 @@ int ServerManager::checkLimits(std::vector<std::string> limits, std::string sear
 	}
 	return exit;
 }
-
