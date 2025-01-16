@@ -513,7 +513,6 @@ void ServerManager::startServer(){
 	// Cerrar sockets de clientes antes de aplicar SO_LINGER
     for (size_t i = 1; i < fds.size(); i++) {
         if (fds[i].fd != STDIN_FILENO) {
-            // Cerrar la conexión de forma ordenada antes de aplicar SO_LINGER
             shutdown(fds[i].fd, SHUT_RDWR);
             ServerManager::setSocketLinger(fds[i].fd);
             close(fds[i].fd);
