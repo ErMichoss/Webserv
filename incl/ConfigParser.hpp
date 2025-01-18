@@ -20,7 +20,7 @@ class ConfigParser{
         	std::string root;
         	std::string index;
         	bool autoindex;
-        	std::string redirect_target;
+        	std::map<int, std::string> redirect_target;
 			std::vector<std::string> limits;
 
 			Location(const std::string& p = "/", const std::string& r = "", const std::string& i = "index.html",
