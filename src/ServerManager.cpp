@@ -385,6 +385,14 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 			break;
 		}
 	}
+	if (!server_conf.locations[index].redirect_target.empty()) {
+		std::map<int, std::string>::iterator it = server_conf.locations[index].redirect_target.begin();
+		int code = it->first;
+		std::string loc = it->second;
+		if (code == 301) {
+			return "HTTP/1.1 301 Moved Permanently\r\nLocation: " + loc + "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+		}
+	}
 	//Aqui compruebo que si no hay limits se ponga "NONE", para manejar restricciones
 	if (server_conf.locations[index].limits.empty())
 		server_conf.locations[index].limits.push_back("NONE");

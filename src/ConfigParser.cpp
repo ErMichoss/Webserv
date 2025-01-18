@@ -63,7 +63,12 @@ int ConfigParser::extractLocationConf(Location& location, std::string line){
 		std::string redirect_target = this->exctractString(15, line);
 
 		if (redirect_target.empty()) return 1;
-		else location.redirect_target = redirect_target;
+		else {
+			size_t pos = redirect_target.find(" ");
+			int code = atoi(redirect_target.substr(0, pos).c_str());
+			std::string redirect = redirect_target.substr(pos + 1);
+			location.redirect_target[code] = redirect;
+		}
 	} else if (line.substr(0, 5) == "limit"){
 		std::vector<std::string> limits;
 
