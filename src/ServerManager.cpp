@@ -516,12 +516,21 @@ void ServerManager::startServer(){
 }
 
 ConfigParser::Server ServerManager::getServerName(std::string request){
-	std::istringstream req_stream(request);
-	std::string protocol, host, temp;
-        
-    std::getline(req_stream, temp, '/');
-    std::getline(req_stream, host, '/');
+    std::size_t host_pos = request.find("Host: ");
+    if (host_pos == std::string::npos) {
+        return this->server_confs[0];
+    }
 
+    std::string host = request.substr(host_pos + 6);
+    std::size_t host_end = host.find("\r\n");
+    if (host_end != std::string::npos) {
+        host = host.substr(0, host_end);
+    }
+	std::size_t colon_pos = host.find(":");
+	if (colon_pos != std::string::npos){
+		host = host.substr(0, colon_pos);
+	}
+	std::cout << host << std::endl;
 	for (size_t i = 0; i < this->server_confs.size(); i++){
 		if (this->server_confs[i].server_name == host)
 			return this->server_confs[i];

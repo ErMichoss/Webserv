@@ -1,5 +1,5 @@
 #ifndef CONFIGPARSER_HPP
-# define CONFIGPARSER_HPP
+ # define CONFIGPARSER_HPP
 
 # include <string>
 # include <map>
@@ -24,8 +24,8 @@ class ConfigParser{
 			std::vector<std::string> limits;
 
 			Location(const std::string& p = "/", const std::string& r = "", const std::string& i = "index.html",
-             bool a = false, const std::string& rt = "")
-        	: path(p), root(r), index(i), autoindex(a), redirect_target(rt) {}
+             bool a = false)
+        	: path(p), root(r), index(i), autoindex(a) {}
     	};
 
     	struct Server {
