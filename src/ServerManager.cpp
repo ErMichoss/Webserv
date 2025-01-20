@@ -9,27 +9,23 @@ sem_t semaphore;
 ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
     this->server_confs.push_back(server_conf);
     this->server_fd = socket;
+	struct pollfd server_pollfd = {this->server_fd, POLLIN, 0};
+    fds.push_back(server_pollfd);
+
+	struct pollfd stdin_pollfd = {STDIN_FILENO, POLLIN, 0};
+	fds.push_back(stdin_pollfd);
 }
 
 ServerManager::~ServerManager() {}
 
-void* ServerManager::monitor_exit_command_static(void* arg) {
-    ServerManager* this_ptr = static_cast<ServerManager*>(arg);
-    this_ptr->monitor_exit_command(); 
-	return NULL;
-}
+void ServerManager::setSocketLinger(int socket_df)
+{
+	struct linger sl;
+	sl.l_onoff = 1;
+	sl.l_linger = 0;
 
-void ServerManager::monitor_exit_command() {
-    std::string input;
-    while (running) {
-        std::getline(std::cin, input);
-        if (input == "exit") {
-            std::cout << "Exit command received. Shutting down server...\n";
-			running = false;
-			break;
-        }
-    }
-    exit(1); 
+	if (setsockopt(socket_df, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl)) < 0)
+    	perror("setsockopt(SO_LINGER) failed");
 }
 
 /**
@@ -159,45 +155,39 @@ std::string ServerManager::handlePostUpload(std::string request, std::string ser
 * @return on success a 200 and the response to the request, on failure the corresponding HTTP error.
 */
 std::string ServerManager::handlePost(std::string request, std::string request_path, std::string server_root) {
-	//Esta funcion es la que no me funciona del todo que bueno no se porque el problema es q me envia la respuesta a la terminal en vez del navegador
 	std::cout << "Entra al POST" << std::endl;
-	//Busco el fin de la cabecera HTTP si no lo encuentro envio un error 400
+
     std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
         return HTTP400 + this->active_server.error_pages[400];
     }
 
-	//Busco en la cabecera donde esta el tamaño del contendio que se envia, si no esta envio un error 411
     std::string headers = request.substr(0, header_end);
-    std::size_t content_length_pos = headers.find("Content-Length: "); //guardo la posicion
+    std::size_t content_length_pos = headers.find("Content-Length: ");
     if (content_length_pos == std::string::npos) {
         return HTTP411 + this->active_server.error_pages[411];
     }
 
-	//Esto de aqui me guarda literalmente el contendo de content_lenght, es decir, si ocupa 128 pues guado eso 128
     std::string content_length = headers.substr(content_length_pos + 16);
     std::size_t content_length_end = content_length.find("\r\n");
     if (content_length_end != std::string::npos) {
         content_length = content_length.substr(0, content_length_end);
     }
 
-	//Busco en la cabecera donde estan el tipo de datos que contiene el cuerpo de la petiocion, si no esta envion un error 415
     std::size_t content_type_pos = headers.find("Content-Type: ");
     if (content_type_pos == std::string::npos) {
         return HTTP415 + this->active_server.error_pages[415];
     }
 
-	//Esto me gurad literalmente el contenido de Content-Type.
     std::string content_type = headers.substr(content_type_pos + 14);
     std::size_t content_type_end = content_type.find("\r\n");
     if (content_type_end != std::string::npos) {
         content_type = content_type.substr(0, content_type_end);
     }
 
-	//Pongo las variables de entorno necesitadas por el cgi para ejecutar el script de php
     setenv("REQUEST_METHOD", "POST", 1);
-    setenv("CONTENT_TYPE", content_type.c_str(), 1); // Ajusta según sea necesario
-    setenv("CONTENT_LENGTH", content_length.c_str() , 1); // Ajusta según sea necesario
+    setenv("CONTENT_TYPE", content_type.c_str(), 1);
+    setenv("CONTENT_LENGTH", content_length.c_str() , 1);
     setenv("SCRIPT_FILENAME", (server_root + request_path).c_str(), 1);
     setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
     setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
@@ -205,7 +195,6 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
 
 	std::string body = request.substr(header_end + 4);
 
-    // Crear un pipe para capturar la salida del proceso PHP
 	int fd_read[2];
 	int fd_write[2];
 	pipe(fd_read);
@@ -225,23 +214,27 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
 		exit(EXIT_FAILURE);
 	}
 	close(fd_write[0]);
+
+	/*struct pollfd write_pipe = {fd_write[1], POLLIN, 0};
+	this->fds.push_back(write_pipe);*/
+
 	write(fd_write[1], body.c_str(), body.size());
 	close(fd_write[1]);
 	close(fd_read[1]);
 	std::string output;
-	char buffer[1024];
-	std::memset(buffer, 0, 1024);
+	char buffer[BUFFER_SIZE];
+	std::memset(buffer, 0, BUFFER_SIZE);
+
+	/*struct pollfd read_pipe = {fd_read[0], POLLIN, 0};
+	this->fds.push_back(read_pipe);*/
+
 	while (read(fd_read[0], buffer, 1023) > 0){
 		output.append(buffer);
 		std::memset(buffer, 0, 1024);
 	}
 	close(fd_read[0]);
-	//waitpid(pid, NULL, 0);
 
-	//std::cout << "Llega" << std::endl;
-
-    // Procesar la salida generada por PHP
-    header_end = output.find("\r\n\r\n"); // Buscar el fin de los encabezados
+    header_end = output.find("\r\n\r\n"); 
     if (header_end == std::string::npos) {
         std::cerr << "Respuesta PHP malformada." << std::endl;
         return HTTP500 + this->active_server.error_pages[500];
@@ -249,13 +242,12 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
 
 	headers.clear();
     headers = output.substr(0, header_end);
-    std::string content = output.substr(header_end + 4); // El contenido es todo lo que sigue
+    std::string content = output.substr(header_end + 4);
 
-    // Crear la respuesta HTTP
     std::string response = "HTTP/1.1 200 OK\r\n";
     response += headers + "\r\n";
 	response += "Connection: close\r\n";
-    response += "Content-Length: " + ft_itoa(content.size()) + "\r\n\r\n"; // Convertir tamaño a cadena
+    response += "Content-Length: " + ft_itoa(content.size()) + "\r\n\r\n";
     response += content;
 	std::cout << "Sale del POST" << std::endl;
     return response;
@@ -271,11 +263,8 @@ std::string ServerManager::handlePost(std::string request, std::string request_p
  * @return a std::string of the static file contents.
  */
 std::string ServerManager::getFile(std::string request_path, std::string server_root, std::string cgi, std::string request){
-	//Aqui pues saco la ruta absoluta de donde estan las cosas en el server
 	std::string path = server_root + request_path;
 	std::cout << "Entra al GET" << std::endl;
-	//Si al el archivo es .php y el servidor tiene puesto cgi: "php" pues ejecuta el archivo .php que es esencialmente ejecutar un script en la terminal
-	// con el comnado php-cgi y te lo devuelve ahi en es STDOUT
 	if (path.find(".php") != std::string::npos && !cgi.empty()) {
 		unsetenv("CONTENT_TYPE");
 		unsetenv("CONTENT_LENGTH");
@@ -299,31 +288,31 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 			return HTTP500;
 		}
 
-		if (pid == 0) { // Child process
-			close(pipe_fd[0]); // Close read end
-			dup2(pipe_fd[1], STDOUT_FILENO); // Redirect stdout to write end of the pipe
-			close(pipe_fd[1]); // Close original write end
+		if (pid == 0) {
+			close(pipe_fd[0]);
+			dup2(pipe_fd[1], STDOUT_FILENO);
+			close(pipe_fd[1]);
 
-			std::string command = "/usr/bin/php-cgi"; // Command to execute
+			std::string command = "/usr/bin/" + this->active_server.cgi;
 			char *const args[] = {const_cast<char *>(command.c_str()), const_cast<char *>(path.c_str()), NULL};
 
-			execve(args[0], args, environ); // Execute php-cgi
-			exit(1); // Exit if execvp fails
-		} else { // Parent process
-			close(pipe_fd[1]); // Close write end
+			execve(args[0], args, environ);
+			exit(1);
+		} else {
+			close(pipe_fd[1]);
 
 			char buffer[BUFFER_SIZE];
-			std::string response = "HTTP/1.1 200 OK\r\n"; // Response header
+			std::string response = "HTTP/1.1 200 OK\r\n";
 			std::string aux;
 
 			ssize_t bytes_read;
 			while ((bytes_read = read(pipe_fd[0], buffer, sizeof(buffer))) > 0) {
 				aux.append(buffer, bytes_read);
 			}
-			close(pipe_fd[0]); // Close read end
+			close(pipe_fd[0]);
 
 			int status;
-			waitpid(pid, &status, 0); // Wait for child process to finish
+			waitpid(pid, &status, 0);
 			std::size_t header_end = aux.find("\r\n\r\n");
 			if (header_end == std::string::npos) {
 				return HTTP400 + this->active_server.error_pages[400];
@@ -333,30 +322,31 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 			response += "Content-Length:" + ft_itoa(std::strlen(content.c_str())) + "\r\n";
 			response += aux;
 
-			// Return the response, which in this case is the .php file output
 			std::cout << "Sale del GET" << std::endl;
 			return response;
 		}
 	}
 
-	int fd = open(path.c_str(), O_RDONLY); //abro el archivo normal si no puedo leerlo mando error 400
+	int fd = open(path.c_str(), O_RDONLY);
 	if (fd < 0){
 		return HTTP400 + this->active_server.error_pages[400];
 	}
 
 	char buffer[BUFFER_SIZE];
-	//std::string extension; //= funcion extension
-	std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n"; //cabecera de la respuesta
+	std::string response = "HTTP/1.1 200 OK\r\nConnection: close\r\n";
+	std::string extension = this->findExtension(path);
+	std::string content_type = this->getContentType(extension);
+	response += "Content-Type: " + content_type + "\r\n";
 	std::string content;
 	ssize_t bytes;
-	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0){//Vamos leyendo los contenido del archivo y metiendolos en las respuestas 
+	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0){
 		content.append(buffer, bytes);
 	}
 	response += "Content-Length:" + ft_itoa(std::strlen(content.c_str())) + "\r\n\r\n";
 	response += content;
 	
-	close(fd); //cierro el archivo
-	return response; //devuelvo la respuesta.
+	close(fd);
+	return response;
 }
 
 /**
@@ -371,16 +361,14 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 	std::istringstream req_stream(request);
 	std::string method, path, protocol;
 	size_t index = 0;
-	//Esta va ser la funcon principal del manejor de peticiones
-	//Esto de aqui abajo parece complejo pero es simple y comodo, basicmanete meto la string request en un stream que es como si fuera un archivo
-	//Esto me permite coger cosas por palabaras, cada vez que hago un >> pillo una palabra.
+
 	req_stream >> method >> path >> protocol;
 
-	//Aqui pillo la configuracion de la ruta en la que se ha hecho la request.
-	//Por si no lo sabias para eso sirve locations, para hacer configuraciones especificas de lugares especificos del servidor, por ejemplo no permitir que se haga
-	//peticiones GET en cierta rutas.
+	std::size_t last_bar = path.find_last_of("/");
+	std::string directory_path = path.substr(0, last_bar);
+	std::string file = path.substr(last_bar);
 	for (size_t i = 0; i < server_conf.locations.size(); i++){
-		if (server_conf.locations[i].path == path){
+		if (server_conf.locations[i].path == directory_path){
 			index = i;
 			break;
 		}
@@ -390,40 +378,29 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 		int code = it->first;
 		std::string loc = it->second;
 		if (code == 301) {
-			return "HTTP/1.1 301 Moved Permanently\r\nLocation: " + loc + "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+			return "HTTP/1.1 301 Moved Permanently\r\nLocation: " + loc + file + "\r\n\r\n";
 		}
 	}
-	//Aqui compruebo que si no hay limits se ponga "NONE", para manejar restricciones
 	if (server_conf.locations[index].limits.empty())
 		server_conf.locations[index].limits.push_back("NONE");
-	//El metodo GET basicamente te devuelve archivos, ya sean dinamicos o estaticos y pues eso hago aqui, pillo q archivo me piden y se lo devuelvo
 	if (method == "GET"){
-		//Compruebo que se pueda hacer GET en la ruta desde la q se pidio si no pues no se hace y se devuelve un error 405
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")){
-			if (path == "/") //Si el path es el raiz devuelvo el index que tenga el locations por defecto
+			if (path == "/")
 				path = "/" + server_conf.locations[index].index;
-			return getFile(path, server_conf.locations[index].root, server_conf.cgi, request); //Aqui es donde sucede toda la magia del archivo 
+			return getFile(path, server_conf.locations[index].root, server_conf.cgi, request);
 		}
 		return HTTP405 + this->active_server.error_pages[405];
-	//El metodo POST hace muchas cosas de momento lo que tengo hecho 100% es subir archivos al servidor lo otro esta a casi.
 	} else if (method == "POST"){
-		//Compruebo que se pueda hacer POST en la ruta desde la q se pidio si no pues no se hace y devuelve un error 405
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")){
-			//Si se hace un upload pues es que se quiere subir un archivo al servidro entonces puese eso hacemos
 			if (path == "/upload") {
-				return handlePostUpload(request, server_conf.locations[index].root); // MAGIC este no te lo comento por dentro porque funciona perfe asi que no creo q lo necesites tocar
+				return handlePostUpload(request, server_conf.locations[index].root);
 			}
-			//Esto se supone que tiene que poder hacer es que tiene que coger los datos de un formulario html y pues mandarselos a un codigo php y q haga cosas chulas
-			//Ejemplo del html es el archivo process.php en la carpeta explcio mas en detalle lo que tiene que hacer alli.
-			return handlePost(request, path, server_conf.locations[index].root); // mas magia pero no funciona del todo
+			return handlePost(request, path, server_conf.locations[index].root);
 		}
 		return HTTP405 + this->active_server.error_pages[405];
-	//EL metodo DELETE no se ni que hace no lo he mirado jsjsjsj :3
 	} else if (method == "DELETE"){
-		//ejecutar DELETE
 		return handle_delete(server_conf.locations[index].root, request);
 	}
-	//Si no es ningun metodo pues error 405 y pa lante como los de alicante
 	return HTTP405 + this->active_server.error_pages[405];
 }
 
@@ -431,76 +408,53 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
  * @brief Starts the server so it can handle request and connections.
  */
 void ServerManager::startServer(){
-	//Creo mi estructura de pollfd y meto el socket del servidor
-	std::vector<struct pollfd> fds;
-	struct pollfd server_pollfd = {this->server_fd, POLLIN, 0};
-    fds.push_back(server_pollfd);
+	std::string prontf;
 
-	//manejo las señales como en minishell para que el ctrl-C no cierre el programa a cascoporro
-	signal(SIGINT, handle_signal);
-    signal(SIGTERM, handle_signal);
-
-	//Bucle principal
 	while (running) {
-		int count = poll(&fds[0], fds.size(), -1); // esto comprueba que hay eventos en los file descriptors
-		//&fds[0] Es un puntero al primer elemento del vector de estructuras pollfd
-		//fds.size() Es el numero de elementos del vector
-		//-1 indica el tiempo que esperara poll como el valor es -1 esperara indefinidamente
+		int count = poll(&fds[0], fds.size(), -1);
 		if (!running) {
-			// si se ha presionado el ctrl-C sale del bucle o exit.
 			std::cout << "Exiting server...\n";
 			break;
-		}	
-		//si hay un error con poll Salgo
+		}
 		if (count < 0){
 			std::cerr << "Error en poll: ";
 			perror("poll");
 			break;
 		}
-		//bucle de conexiones
 		for (size_t i = 0; i < fds.size(); i++){
 			if (fds[i].revents & POLLIN){
-				if (fds[i].fd == this->server_fd){ // Si el evento sucede en el fd del servidor es que un cliente se quiere conectar, entonces lo conectamos
-					//Nueva conexion
-					//Hasta aqui creo q llegaste tu en el tuyo pero bueno lo explico que no hace daño :D
-					struct sockaddr_in client; // Declaro una estructura sockaddr_in -> Esta estructura se utiliza para alamacenar la dirección
-					//del cliente que se conecta al servidor, incluye informacion como la direccion IP y el puerto del cliente
-					socklen_t client_len = sizeof(client); // Esto lo uso para indicar el tamaño de la estructura anterio poco mas la verdad, la chicha
-					//esta en el accept
-					int client_fd = accept(this->server_fd, (struct sockaddr*)&client, &client_len); //accept lo que hace es que espera a una conexion entrante
-					// en el socket del servidor (server_fd), Si hay una conexion entrante la funcion crea un nuevo socket para manejar la conexion con el clienta
-					//también llena la estructura sockaddr_in que creamos anteriormente y actualiza client_len, en resume es la repolla y hace un monton de cosas por detrás
-					//que asi nosotros no tenemos que hacer y nos devuelve el file descriptor del cliente
-					if (client_fd >= 0){ // Si el accept no falla meteremos al cliente en nuestro vector para manejarlo
+				if (fds[i].fd == STDIN_FILENO) {
+					std::getline(std::cin, prontf);
+					if (prontf == "exit"){
+						std::cout << "Exiting server...\n";
+						running = false;
+						break;
+					}
+				}
+				else if (fds[i].fd == this->server_fd){
+					struct sockaddr_in client;
+					socklen_t client_len = sizeof(client);
+					int client_fd = accept(this->server_fd, (struct sockaddr*)&client, &client_len);
+					if (client_fd >= 0){
 						struct pollfd poll_client = {client_fd, POLLIN, 0};
 						fds.push_back(poll_client);
-						//mensaje de exito
 						std::cout << "Cliente conectado: " << client_fd << std::endl;
-					} else { // Si falla pues mensaje de error y tirando
-						//mensaje de error
+					} else {
 						std::cerr << "No se pudo conectar el cliente: " << client_fd << std::endl;
 					}	
 				} else {
-					//Manejar cliente
-					//Aqui hay un monton de cosas del protocolo HTTP, es decir todo.
-					//Asi de manera resumen un servidor HTTP va a recibir una peticion contestar y luego corta la conexion establecida
-					//Entonces por partes vamos a desglosar la mierda esta que he hecho mientras te lo pasabas de puta madre por el caribe.
 					char buffer[BUFFER_SIZE];
 					std::memset(buffer, 0, sizeof(buffer));
-					ssize_t bytes = read(fds[i].fd, buffer, sizeof(buffer)); //Leeo la peticion entera enciada por el cliente
-					if (bytes > 0){ //Si bien la manejamos
+					ssize_t bytes = read(fds[i].fd, buffer, sizeof(buffer));
+					if (bytes > 0){
 						ConfigParser::Server server_conf = getServerName(std::string(buffer, bytes));
-						this->active_server = server_conf; // Esto es lo que mencione de variios servidores escucharndo
-						//Al mismo host:port basicamente pillo la configuracion del servidor que llama el cliente
-						std::string const response = handle_request(std::string(buffer, bytes), server_conf); // Y aqui pasa la magia
-						send(fds[i].fd, response.c_str(), strlen(response.c_str()), 0);// Aqui Envio la repuesta al cliente
-						//Desconectamos al cliente.
+						std::string const response = handle_request(std::string(buffer, bytes), server_conf);
+						send(fds[i].fd, response.c_str(), strlen(response.c_str()), 0);
 						std::cout << "Client disconnected: " << fds[i].fd << std::endl;
 						close(fds[i].fd);
 						fds.erase(fds.begin() + i);
 						--i;
-					} else { //Si mal pues cortamos y tiramos
-						// Desconexion o error.
+					} else {
 						std::cout << "Client disconnected: " << fds[i].fd << std::endl;
 						close(fds[i].fd);
 						fds.erase(fds.begin() + i);
@@ -510,8 +464,15 @@ void ServerManager::startServer(){
 			}
 		}
 	}
-	//Cieroo los sockets
-	close(fds[0].fd);
+    for (size_t i = 1; i < fds.size(); i++) {
+        if (fds[i].fd != STDIN_FILENO) {
+            shutdown(fds[i].fd, SHUT_RDWR);
+            ServerManager::setSocketLinger(fds[i].fd);
+            close(fds[i].fd);
+        }
+    }
+
+	ServerManager::setSocketLinger(this->server_fd);
 	close(this->server_fd);
 }
 
@@ -530,7 +491,6 @@ ConfigParser::Server ServerManager::getServerName(std::string request){
 	if (colon_pos != std::string::npos){
 		host = host.substr(0, colon_pos);
 	}
-	std::cout << host << std::endl;
 	for (size_t i = 0; i < this->server_confs.size(); i++){
 		if (this->server_confs[i].server_name == host)
 			return this->server_confs[i];
@@ -572,4 +532,53 @@ int ServerManager::checkLimits(std::vector<std::string> limits, std::string sear
 		}
 	}
 	return exit;
+}
+
+std::string ServerManager::findExtension(const std::string& url) {
+    size_t pos = url.find_last_of('.');
+    
+    if (pos == std::string::npos || pos == url.length() - 1) {
+        return "";
+    }
+
+    return url.substr(pos + 1);
+}
+
+std::string ServerManager::getContentType(const std::string& extension){
+	if (extension == "txt")
+		return ("text/plain");
+	else if (extension == "csv")
+		return ("text/csv");
+	else if (extension == "html" || extension == "htm")
+		return ("text/html");
+	else if (extension == "json")
+		return ("application/json");
+	else if (extension == "xml")
+		return ("application/xml");
+	else if  (extension == "jpg" || extension == "jpeg")
+		return ("image/jpeg");
+	else if (extension  == "png")
+		return ("image/png");
+	else if (extension == "gif")
+		return ("image/gif");
+	else if (extension == "svg")
+		return ("image/svg+xml");
+	else if (extension == "mp3")
+		return ("audio/mpeg");
+	else if (extension == "mp4")
+		return ("video/mp4");
+	else if (extension == "wav")
+		return ("audio/wav");
+	else if (extension == "webm")
+		return ("video/webm");
+	else if (extension == "pdf")
+		return ("application/pdf");
+	else if (extension == "doc" || extension == "docx")
+		return ("applicaton/msword");
+	else if (extension == "xls" || extension == "xlsx")
+		return ("application/vnd.ms-excel");
+	else if (extension == "zip")
+		return ("application/zip");
+	else
+		return ("application/octet-stream");
 }

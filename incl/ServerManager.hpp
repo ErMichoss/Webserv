@@ -11,6 +11,7 @@ class ServerManager{
 		//Atributes
 		std::vector<ConfigParser::Server> server_confs;
 		ConfigParser::Server active_server;
+		std::vector<struct pollfd> fds;
 		std::map<int, std::string> errors;
 		int server_fd;
 
@@ -27,6 +28,9 @@ class ServerManager{
 		//Private Methods
 		static void* monitor_exit_command_static(void* arg);
     	void monitor_exit_command();
+		void setSocketLinger(int socket_df);
+		std::string findExtension(const std::string& url);
+		std::string getContentType(const std::string& extension);
 		std::string handle_request(std::string const request, ConfigParser::Server server_conf);
 		std::string getFile(std::string request_path, std::string server_root, std::string cgi, std::string request);
 		std::string handlePostUpload(std::string request, std::string server_root);

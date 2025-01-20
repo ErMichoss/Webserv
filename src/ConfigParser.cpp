@@ -177,10 +177,6 @@ int ConfigParser::extractServerConf(Server& server, std::string line){
  */
 int ConfigParser::addServerConf(){
 	std::string line;
-	//Esto va a ir recorriendo el archivo de configuracion linea a linea y va a ir metiendo los datos en la estrucutra Server de
-	//la clase ConfigParser -> ver en el archivo ConfigParser.hpp linea 31.
-	//El parseo me parece bastante simple de entender y deberia estar terminado, de todas maneras si no entiendes algo me envias
-	//un mensaje
 	while (std::getline(this->file, line)){
 		this->trim(line);
 		Server server;
