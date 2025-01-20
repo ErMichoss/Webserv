@@ -58,16 +58,6 @@ int create_socket(int port, std::string host){
         close(socketfd);
         res = res->ai_next;
     }
-/* 	while (res != NULL){
-		socketfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-		if (socketfd < 0){
-			std::cerr << "Error: no se pudo crear el socket" << std::endl;
-		} else if (bind(socketfd, res->ai_addr, res->ai_addrlen) == 0){
-			break;
-		}
-		close(socketfd);
-		res = res->ai_next;
-	} */
 	if (res == NULL){
 		freeaddrinfo(head);
 		return -1;

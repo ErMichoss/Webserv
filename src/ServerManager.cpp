@@ -337,11 +337,12 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 		return HTTP400;
 	}
 	char buffer[BUFFER_SIZE];
-	std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n"; //cabecera de la respuesta
+	std::string response = "HTTP/1.1 200 OK\r\nConnection: close\r\n"; //cabecera de la respuesta
 	std::string extension = this->findExtension(path);
 	std::cout << "Extension : ======>>>>>>> " << extension << std::endl;
 	std::string content_type = this->getContentType(extension);
 	std::cout << "Content type: ======>>>>>>> " << content_type << std::endl;
+	response += "Content-Type: " + content_type + "\r\n";
 	std::string content;
 	ssize_t bytes;
 	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0){//Vamos leyendo los contenido del archivo y metiendolos en las respuestas 
