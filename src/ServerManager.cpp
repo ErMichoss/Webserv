@@ -336,9 +336,12 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 	if (fd < 0){
 		return HTTP400;
 	}
-
 	char buffer[BUFFER_SIZE];
 	std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n"; //cabecera de la respuesta
+	std::string extension = this->findExtension(path);
+	std::cout << "Extension : ======>>>>>>> " << extension << std::endl;
+	std::string content_type = this->getContentType(extension);
+	std::cout << "Content type: ======>>>>>>> " << content_type << std::endl;
 	std::string content;
 	ssize_t bytes;
 	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0){//Vamos leyendo los contenido del archivo y metiendolos en las respuestas 
@@ -573,4 +576,56 @@ int ServerManager::checkLimits(std::vector<std::string> limits, std::string sear
 		}
 	}
 	return exit;
+}
+
+std::string ServerManager::findExtension(const std::string& url) {
+    // Buscar el último punto en la URL
+    size_t pos = url.find_last_of('.');
+    
+    // Si no hay punto o es el último carácter, no hay extensión
+    if (pos == std::string::npos || pos == url.length() - 1) {
+        return "";
+    }
+
+    // Retornar la extensión
+    return url.substr(pos + 1);
+}
+
+std::string ServerManager::getContentType(const std::string& extension){
+	if (extension == "txt")
+		return ("text/plain");
+	else if (extension == "csv")
+		return ("text/csv");
+	else if (extension == "html" || extension == "htm")
+		return ("text/html");
+	else if (extension == "json")
+		return ("application/json");
+	else if (extension == "xml")
+		return ("application/xml");
+	else if  (extension == "jpg" || extension == "jpeg")
+		return ("image/jpeg");
+	else if (extension  == "png")
+		return ("image/png");
+	else if (extension == "gif")
+		return ("image/gif");
+	else if (extension == "svg")
+		return ("image/svg+xml");
+	else if (extension == "mp3")
+		return ("audio/mpeg");
+	else if (extension == "mp4")
+		return ("video/mp4");
+	else if (extension == "wav")
+		return ("audio/wav");
+	else if (extension == "webm")
+		return ("video/webm");
+	else if (extension == "pdf")
+		return ("application/pdf");
+	else if (extension == "doc" || extension == "docx")
+		return ("applicaton/msword");
+	else if (extension == "xls" || extension == "xlsx")
+		return ("application/vnd.ms-excel");
+	else if (extension == "zip")
+		return ("application/zip");
+	else
+		return ("application/octet-stream");
 }

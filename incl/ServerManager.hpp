@@ -33,6 +33,9 @@ class ServerManager{
 		std::string handle_delete(std::string root, std::string request);
 		bool deleteResource(std::string resource);
 		int checkLimits(std::vector<std::string> limits, std::string search) const;
+
+		std::string findExtension(const std::string& url);
+		std::string getContentType(const std::string& extension);
 };
 
 #endif
