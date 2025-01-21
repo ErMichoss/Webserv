@@ -305,7 +305,6 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 				aux.append(buffer, bytes_read);
 			}
 			close(pipe_fd[0]);
-			std::cout << aux << std::endl;
 			int status;
 			waitpid(pid, &status, 0);
 			std::size_t header_end = aux.find("\r\n\r\n");
@@ -315,7 +314,7 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 			std::string content = aux.substr(header_end + 4);
 			response += "Connection: close\r\n";
 			response += "Content-Length:" + ft_itoa(std::strlen(content.c_str())) + "\r\n";
-			response += "Content-Type: text/html\r\n\r\n";
+			response += "Content-Type: text/html\r\n";
 			response += aux;
 
 			std::cout << "Sale del GET" << std::endl;

@@ -70,6 +70,16 @@ int create_socket(int port, std::string host){
 	return socketfd;
 }
 
+void setSocketLinger(int socket_df)
+{
+	struct linger sl;
+	sl.l_onoff = 1;
+	sl.l_linger = 0;
+
+	if (setsockopt(socket_df, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl)) < 0)
+    	perror("setsockopt(SO_LINGER) failed");
+}
+
 int main(int argc, char *argv[]){
 	if (argc != 2){
 		std::cerr << "Error: Invalid number of arguments (Only 1 config file needed)";
@@ -169,14 +179,13 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-	/*for (size_t j = 1; j < fds.size(); j++) {
+	for (size_t j = 0; j < fds.size(); j++) {
 		if (fds[j].fd != STDIN_FILENO) {
-			servers[i].setSocketLinger(fds[j].fd);
+			setSocketLinger(fds[j].fd);
 			close(fds[j].fd);
 		}
-    }*/
+    }
 	for (size_t i = 0; i < servers.size(); i++){
-		servers[i].setSocketLinger(servers[i].getServerfd());
 		close(servers[i].getServerfd());
 	}
 
