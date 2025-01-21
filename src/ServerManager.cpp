@@ -9,11 +9,6 @@ sem_t semaphore;
 ServerManager::ServerManager(ConfigParser::Server server_conf, int socket) {
     this->server_confs.push_back(server_conf);
     this->server_fd = socket;
-	struct pollfd server_pollfd = {this->server_fd, POLLIN, 0};
-    fds.push_back(server_pollfd);
-
-	struct pollfd stdin_pollfd = {STDIN_FILENO, POLLIN, 0};
-	fds.push_back(stdin_pollfd);
 }
 
 ServerManager::~ServerManager() {}
@@ -293,9 +288,9 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 			dup2(pipe_fd[1], STDOUT_FILENO);
 			close(pipe_fd[1]);
 
-			std::string command = "/usr/bin/" + this->active_server.cgi;
+			std::string command = "/usr/bin/php-cgi";
+			std::cout << command << std::endl;
 			char *const args[] = {const_cast<char *>(command.c_str()), const_cast<char *>(path.c_str()), NULL};
-
 			execve(args[0], args, environ);
 			exit(1);
 		} else {
@@ -310,7 +305,7 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 				aux.append(buffer, bytes_read);
 			}
 			close(pipe_fd[0]);
-
+			std::cout << aux << std::endl;
 			int status;
 			waitpid(pid, &status, 0);
 			std::size_t header_end = aux.find("\r\n\r\n");
@@ -320,6 +315,7 @@ std::string ServerManager::getFile(std::string request_path, std::string server_
 			std::string content = aux.substr(header_end + 4);
 			response += "Connection: close\r\n";
 			response += "Content-Length:" + ft_itoa(std::strlen(content.c_str())) + "\r\n";
+			response += "Content-Type: text/html\r\n\r\n";
 			response += aux;
 
 			std::cout << "Sale del GET" << std::endl;
@@ -407,74 +403,73 @@ std::string ServerManager::handle_request(std::string const request, ConfigParse
 /**
  * @brief Starts the server so it can handle request and connections.
  */
-void ServerManager::startServer(){
+/*void ServerManager::startServer(){
 	std::string prontf;
 
-	while (running) {
-		int count = poll(&fds[0], fds.size(), -1);
-		if (!running) {
-			std::cout << "Exiting server...\n";
-			break;
-		}
-		if (count < 0){
-			std::cerr << "Error en poll: ";
-			perror("poll");
-			break;
-		}
-		for (size_t i = 0; i < fds.size(); i++){
-			if (fds[i].revents & POLLIN){
-				if (fds[i].fd == STDIN_FILENO) {
-					std::getline(std::cin, prontf);
-					if (prontf == "exit"){
-						std::cout << "Exiting server...\n";
-						running = false;
-						break;
-					}
+	struct pollfd server_pollfd = {this->server_fd, POLLIN, 0};
+    this->fds.push_back(server_pollfd);
+
+	struct pollfd stdin_pollfd = {STDIN_FILENO, POLLIN, 0};
+	this->fds.push_back(stdin_pollfd);
+
+	int count = poll(&(this->fds[0]), this->fds.size(), -1);
+
+	if (count < 0){
+		std::cerr << "Error en poll: ";
+		perror("poll");
+		running = false;
+		return ;
+	}
+	for (size_t i = 0; i < fds.size(); i++){
+		if (fds[i].revents & POLLIN){
+			if (fds[i].fd == STDIN_FILENO) {
+				std::getline(std::cin, prontf);
+				if (prontf == "exit"){
+					std::cout << "Exiting server...\n";
+					running = false;
+					break;
 				}
-				else if (fds[i].fd == this->server_fd){
-					struct sockaddr_in client;
-					socklen_t client_len = sizeof(client);
-					int client_fd = accept(this->server_fd, (struct sockaddr*)&client, &client_len);
-					if (client_fd >= 0){
-						struct pollfd poll_client = {client_fd, POLLIN, 0};
-						fds.push_back(poll_client);
-						std::cout << "Cliente conectado: " << client_fd << std::endl;
-					} else {
-						std::cerr << "No se pudo conectar el cliente: " << client_fd << std::endl;
-					}	
+			}
+			else if (fds[i].fd == this->server_fd){
+				struct sockaddr_in client;
+				socklen_t client_len = sizeof(client);
+				int client_fd = accept(this->server_fd, (struct sockaddr*)&client, &client_len);
+				if (client_fd >= 0){
+					struct pollfd poll_client = {client_fd, POLLIN, 0};
+					fds.push_back(poll_client);
+					std::cout << "Cliente conectado: " << client_fd << std::endl;
 				} else {
-					char buffer[BUFFER_SIZE];
-					std::memset(buffer, 0, sizeof(buffer));
-					ssize_t bytes = read(fds[i].fd, buffer, sizeof(buffer));
-					if (bytes > 0){
-						ConfigParser::Server server_conf = getServerName(std::string(buffer, bytes));
-						std::string const response = handle_request(std::string(buffer, bytes), server_conf);
-						send(fds[i].fd, response.c_str(), strlen(response.c_str()), 0);
-						std::cout << "Client disconnected: " << fds[i].fd << std::endl;
-						close(fds[i].fd);
-						fds.erase(fds.begin() + i);
-						--i;
-					} else {
-						std::cout << "Client disconnected: " << fds[i].fd << std::endl;
-						close(fds[i].fd);
-						fds.erase(fds.begin() + i);
-						--i;
-					}
+					std::cerr << "No se pudo conectar el cliente: " << client_fd << std::endl;
+				}	
+			} else {
+				char buffer[BUFFER_SIZE];
+				std::memset(buffer, 0, sizeof(buffer));
+				ssize_t bytes = read(fds[i].fd, buffer, sizeof(buffer));
+				if (bytes > 0){
+					ConfigParser::Server server_conf = getServerName(std::string(buffer, bytes));
+					std::string const response = handle_request(std::string(buffer, bytes), server_conf);
+					send(fds[i].fd, response.c_str(), strlen(response.c_str()), 0);
+					std::cout << "Client disconnected: " << fds[i].fd << std::endl;
+					close(fds[i].fd);
+					fds.erase(fds.begin() + i);
+					--i;
+				} else {
+					std::cout << "Client disconnected: " << fds[i].fd << std::endl;
+					close(fds[i].fd);
+					fds.erase(fds.begin() + i);
+					--i;
 				}
 			}
 		}
 	}
-    for (size_t i = 1; i < fds.size(); i++) {
-        if (fds[i].fd != STDIN_FILENO) {
-            shutdown(fds[i].fd, SHUT_RDWR);
-            ServerManager::setSocketLinger(fds[i].fd);
-            close(fds[i].fd);
-        }
-    }
+	for (size_t i = 0; i < fds.size(); i++){
+		if (fds[i].fd == this->server_fd || fds[i].fd == STDIN_FILENO){
+			fds.erase(fds.begin() + i);
+			--i;
+		}
 
-	ServerManager::setSocketLinger(this->server_fd);
-	close(this->server_fd);
-}
+	}
+}*/
 
 ConfigParser::Server ServerManager::getServerName(std::string request){
     std::size_t host_pos = request.find("Host: ");
