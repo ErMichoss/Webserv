@@ -81,6 +81,7 @@ extern char **environ;
  * Global variable to manage the server status.
  */
 static bool running = true;
+static std::vector<struct pollfd> fds;
 
 //*** UTILS ***
 
