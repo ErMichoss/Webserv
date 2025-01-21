@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Pagina Prueba</title>
+	<script>
+		// Función que maneja el envío del formulario
+		function handleSubmit(event) {
+			// Prevenir el comportamiento por defecto (que recarga la página)
+			event.preventDefault();
+
+			// Obtener el valor del textbox
+			var text = document.getElementById("textbox").value;
+
+			// Mostrar el texto en un nuevo elemento <p> debajo del formulario
+			var result = document.getElementById("result");
+			result.textContent = "Texto ingresado: " + text;
+
+			// Limpiar el campo de texto
+			document.getElementById("textbox").value = "";
+		}
+	</script>
+</head>
+<body>
+	<h1>Hola Mundo2!</h1>
+	
+	<!-- Formulario simple -->
+	<form action="/submit" method="POST">
+		<label for="textbox">Introduce tu texto:</label>
+		<input type="text" id="textbox" name="textbox" placeholder="Escribe algo aquí..." required>
+		<button type="submit">Enviar</button>
+	</form>
+
+	<p id="result"></p>
+
+</body>
+</html>

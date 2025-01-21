@@ -41,7 +41,6 @@ std::string ft_itoa(std::size_t n){
         n /= 10;
     } while (n > 0);
 
-    // Invertir la cadena para obtener el orden correcto
     std::reverse(str.begin(), str.end());
 
 	return str;

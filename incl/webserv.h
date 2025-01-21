@@ -72,9 +72,7 @@
 # define HTTP510 "HTTP/1.1 510 Not Extended\r\nContent-Type: text/html\r\n\r\n"
 # define HTTP511 "HTTP/1.1 511 Network Authentication Required\r\nContent-Type: text/html\r\n\r\n"
 
-# ifndef BUFFER_SIZE
-#  define BUFFER_SIZE 8192
-# endif
+# define BUFFER_SIZE BUFSIZ
 
 class ServerManager;
 

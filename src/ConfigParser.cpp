@@ -63,7 +63,12 @@ int ConfigParser::extractLocationConf(Location& location, std::string line){
 		std::string redirect_target = this->exctractString(15, line);
 
 		if (redirect_target.empty()) return 1;
-		else location.redirect_target = redirect_target;
+		else {
+			size_t pos = redirect_target.find(" ");
+			int code = atoi(redirect_target.substr(0, pos).c_str());
+			std::string redirect = redirect_target.substr(pos + 1);
+			location.redirect_target[code] = redirect;
+		}
 	} else if (line.substr(0, 5) == "limit"){
 		std::vector<std::string> limits;
 
@@ -153,7 +158,7 @@ int ConfigParser::extractServerConf(Server& server, std::string line){
 			}
 
 			server.locations.push_back(location);
-		} else if ( !line.empty() &&line.c_str()[0] != '#') {
+		} else if ( !line.empty() && line.c_str()[0] != '#' && line.substr(0, 10) != "error_page") {
 			std::cerr << "Unexpected line: " << line << std::endl; 
 			return 1;
 		}
@@ -172,10 +177,6 @@ int ConfigParser::extractServerConf(Server& server, std::string line){
  */
 int ConfigParser::addServerConf(){
 	std::string line;
-	//Esto va a ir recorriendo el archivo de configuracion linea a linea y va a ir metiendo los datos en la estrucutra Server de
-	//la clase ConfigParser -> ver en el archivo ConfigParser.hpp linea 31.
-	//El parseo me parece bastante simple de entender y deberia estar terminado, de todas maneras si no entiendes algo me envias
-	//un mensaje
 	while (std::getline(this->file, line)){
 		this->trim(line);
 		Server server;
@@ -194,16 +195,21 @@ int ConfigParser::addServerConf(){
 				std::getline(this->file, line);
 			}
 			while(std::getline(this->file, line)){
+				this->trim(line);
 				if (line.substr(0, 11) == "CLOSESERVER")
 					break;
 				if (line.substr(0, 10) == "error_page"){
 					std::string error_page = this->exctractString(10, line);
-					int code = atoi(error_page.substr(0, error_page.find(" ")).c_str());
-					std::string body = error_page.substr(error_page.find(" ") + 1);
-					std::stringstream buffer;
-					std::ifstream content((server.root + body).c_str(), std::ios::binary);
-					buffer << content.rdbuf();
-					server.error_pages[code] = buffer.str();
+					size_t space_pos = error_page.find(" ");
+					int code = atoi(error_page.substr(0, space_pos).c_str());
+					std::string body = error_page.substr(space_pos + 1);
+					std::ifstream content((server.root + "/" + body).c_str(), std::ios::binary);
+					std::string lines;
+					std::string buffer;
+					while (std::getline(content, lines)){
+						buffer += lines;
+					}
+					server.error_pages[code] = buffer;
 				}
 			}
 			this->servers.push_back(server);
