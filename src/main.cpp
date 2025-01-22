@@ -80,7 +80,7 @@ void setSocketLinger(int socket_df)
     	perror("setsockopt(SO_LINGER) failed");
 }
 
-pollinHandler(pollfd fd, std::vector<ServerManager> servers, std::size_t index) {
+void pollinHandler(struct pollfd fd, std::vector<ServerManager> servers, std::size_t* index) {
 	for (std::size_t i = 0; i < servers.size(); i++) {
 		if (fd.fd == servers[i].getServerFd()) {
 			struct sockaddr_in client;
@@ -91,7 +91,7 @@ pollinHandler(pollfd fd, std::vector<ServerManager> servers, std::size_t index) 
 				fds.push_back(poll_client);
 				servers[i].addClient(client_fd);
 			} else {
-				std::cerr << "Error: Client could no connect" << std::cerr;
+				std::cerr << "Error: Client could no connect" << std::endl;
 			}
 		} else if (std::find(
 			servers[i].getClients().begin(),
@@ -100,19 +100,21 @@ pollinHandler(pollfd fd, std::vector<ServerManager> servers, std::size_t index) 
 		) != servers[i].getClients().end()) {
 			char buffer[BUFFER_SIZE];
 			std::memset (buffer, 0, sizeof(buffer));
-			std::ssize_t bytes read(fd.fd, buffer, sizeof(buffer));
+			ssize_t bytes = read(fd.fd, buffer, sizeof(buffer));
 			if (bytes > 0){
 				ConfigParser::Server server_conf = servers[i].getServerName(std::string(buffer, bytes));
-				server[i].server_conf = server_conf;
-				server[i].setActiveClient(fd.fd);
-				severs[i].handle_request(std::string(buffer, bytes), server_conf);
-				fds.erase(fds.begin() + index)
+				servers[i].server_conf = server_conf;
+				servers[i].setActiveClient(fd.fd);
+				servers[i].handle_request(std::string(buffer, bytes), server_conf);
+				fds.erase(fds.begin() + (int)index);
 				--index;
+				struct pollfd client_out = { fd.fd, POLLOUT, 0};
+				fds.push_back(client_out);
 			} else {
-				server[i].removeClient(fd.fd);
+				servers[i].removeClient(fd.fd);
 				std::cout << "Envent: Client Disconnected: " << fd.fd << std::endl;
-				close(fd[index].fd);
-				fds.erase(fds.begin() + index)
+				close(fd.fd);
+				fds.erase(fds.begin() + (int)index);
 				--index;
 			}
 		}
@@ -155,16 +157,14 @@ int main(int argc, char *argv[]) {
 	while (running) {
 		int count = poll(&fds[0], fds.size(), -1);
 		if (count < 0) {
-			std::cerr << "Error: "; perror(poll);
+			std::cerr << "Error: There was an error in Poll";
 			running = false;
 			break;
 		}
 
 		for (std::size_t i = 0; i < fds.size(); i++) {
 			if (fds[i].revents & POLLIN) {
-				pollinHandler(fd[i].fd, servers, i);
-			} else if (fds[i].revents & POLLOUT) {
-
+				pollinHandler(fds[i], servers, &i);
 			}
 		}
 	}

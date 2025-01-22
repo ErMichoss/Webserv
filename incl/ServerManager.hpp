@@ -10,16 +10,17 @@ class ServerManager{
 	public:
 		//Public Atributes
 		ConfigParser::Server server_conf;
+		std::map<int, std::string> client_response;
 		
 	private:
 		//Atributes
 		std::vector<ConfigParser::Server> server_confs;
 		std::vector<int> clients;
-		std::map<int, int> stopped_client;
 		int active_client;
 		
+		std::vector<int> fdcgi;
+
 		int server_fd;
-		int pipe_fd[2];
 		int fd_read[2];
 		int fd_write[2];
 		int file_to_get;
@@ -45,11 +46,14 @@ class ServerManager{
 
 	private:
 		//Private Methods
-		int checkLimits(std::vector<std::string> limits, std::string search) const;
+		int	checkLimits(std::vector<std::string> limits, std::string search) const;
 		void getFile(std::string request_path, std::string server_root, std::string cgi, std::string request);
 		void handlePost(std::string request, std::string request_path, std::string server_root);
+		void handlePostUpload(std::string request, std::string server_root);
 		void handle_delete(std::string root, std::string request);
 		bool deleteResource(std::string resource);
+		std::string findExtension(const std::string& url);
+		std::string getContentType(const std::string& extension);
 
 };
 

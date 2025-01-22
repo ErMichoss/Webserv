@@ -1,6 +1,5 @@
 #include "ServerManager.hpp"
 
-
 /**
  * @brief The constructor for the ServerManager class
  */
@@ -24,11 +23,7 @@ std::vector<int> ServerManager::getClients() {
 }
 
 void ServerManager::removeClient(int fd) {
-	std::vector<int>::iterator it = std::remove(
-		this->clients.begin(),
-		this->clients.end(),
-		fd
-	)
+	std::vector<int>::iterator it = std::remove(this->clients.begin(), this->clients.end(), fd);
 
 	this->clients.erase(it, this->clients.end());
 }
@@ -37,63 +32,6 @@ void ServerManager::setActiveClient(int fd) {
 	this->active_client = fd;
 }
 
-void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
-	std::istringstream req_stream(request);
-	std::string method, path, protocol;
-	std::size_t index = 0;
-
-	req_stream >> method >> path >> protocol;
-
-	std::size_t last_bar = path.find_last_of("/");
-	std::string directory_path = path.substr(0, last_bar);
-	std::string file = path.substr(last_bar);
-
-	for (std::size_t i = 0; i < server_conf.locations.size(); i++) {
-		if (server_conf.locations[i].path == directory_path) {
-			index = i;
-			break;
-		}
-	}
-
-	if (server_conf.locations[index].limits.empty()){
-		server_conf.locations[index].limits.push_back("NONE");
-	}
-
-	if (!server_conf.locations[index].redirect_target.empty()) {
-		std::map<int, std::string>::iterator it = server_conf.locations[index].redirect_target.begin();
-		int code = it->first;
-		std::string loc = it->second;
-		if (code == 301) {
-			this->response = "HTTP/1.1 301 Moved Permanently\r\nLocation: " + loc + file + "\r\n\r\n";
-		}
-	} else if (method == "GET") {
-		if (
-			server_conf.locations[index].limits == "NONE" || 
-			!this->checkLimits(server_conf.locations[index].limits, "GET")
-		) {
-			if (path == "/") { path = "/" + server_conf.locations[index].index; }
-			getFile(path, server_conf.locations[index].root, server_conf.cgi, request);
-		}
-		response = HTTP405 + server_conf.error_pages[405];
-	} else if (method == "POST") {
-		if (
-			server_conf.locations[index].limits == "NONE" || 
-			!this->checkLimits(server_conf.locations[index].limits, "POST")
-		) {
-			if (path == "/upload") { handlePostUpload(request, server_conf.locations[index].root); }
-			else { handlePost(request, path, server_conf.locations[index].root); }
-		}
-		response = HTTP405 + server_conf.error_pages[405];
-	} else if (method == "DELETE") {
-		if (
-			server_conf.locations[index].limits == "NONE" || 
-			!this->checkLimits(server_conf.locations[index].limits, "DELETE")
-		) { 
-			handleDelete(server_conf.locations[index].root, request);
-		}
-		response = HTTP405 + server_conf.error_pages[405];
-	}
-}
 
 bool ServerManager::deleteResource(std::string resource){
 	if (std::remove(resource.c_str()) == 0){
@@ -103,7 +41,7 @@ bool ServerManager::deleteResource(std::string resource){
 	}
 }
 
-void ServerManager::handle_delete(std::string root, std::string request){
+void ServerManager::handle_delete(std::string root, std::string request) {
 	std::size_t pos = request.find(" ") + 1;
 	std::size_t pos_end = request.find(" ", pos);
 	std::string resource = root;
@@ -111,32 +49,32 @@ void ServerManager::handle_delete(std::string root, std::string request){
 	std::cout << resource << std::endl;
 
 	if(deleteResource(resource)){
-		response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
+		client_response[active_client] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
 	} else {
-		response HTTP404 + server_conf.error_pages[404];
+		client_response[active_client] = HTTP404 + server_conf.error_pages[404];
 	}
 }
 
-void SeverManager::handlePostUpload(std::string request, std::string server_root) {
+void ServerManager::handlePostUpload(std::string request, std::string server_root) {
 	std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-        return HTTP400 + this->active_server.error_pages[400];
+        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
     }
 
     std::string headers = request.substr(0, header_end);
     std::size_t content_length_pos = headers.find("Content-Length: ");
     if (content_length_pos == std::string::npos) {
-        return HTTP411 + this->active_server.error_pages[411];
+        client_response[active_client] =  HTTP411 + this->server_conf.error_pages[411];
     }
 
     std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
     if (content_type_pos == std::string::npos) {
-        return HTTP415 + this->active_server.error_pages[415];
+        client_response[active_client] = HTTP415 + this->server_conf.error_pages[415];
     }
     std::string boundary_prefix = "boundary=";
     std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
     if (boundary_pos == std::string::npos) {
-        return HTTP400 + this->active_server.error_pages[400];
+        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
     }
     std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
     boundary = boundary.substr(0, boundary.find("\r\n"));
@@ -144,26 +82,26 @@ void SeverManager::handlePostUpload(std::string request, std::string server_root
     std::string body = request.substr(header_end + 4);
     std::size_t file_start = body.find(boundary);
     if (file_start == std::string::npos) {
-        return HTTP400 + this->active_server.error_pages[400];
+        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
     }
     file_start += boundary.size() + 2;
 
     std::size_t file_end = body.find(boundary, file_start);
     if (file_end == std::string::npos) {
-        return HTTP400 + this->active_server.error_pages[400];
+        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
     }
     std::string file_content = body.substr(file_start, file_end - file_start);
 
     std::size_t filename_pos = file_content.find("filename=\"");
     if (filename_pos == std::string::npos) {
-        return HTTP400 + this->active_server.error_pages[400];
+        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
     }
     std::string filename = file_content.substr(filename_pos + 10);
     filename = filename.substr(0, filename.find("\""));
 
     std::size_t data_start = file_content.find("\r\n\r\n");
     if (data_start == std::string::npos) {
-        return HTTP400 + this->active_server.error_pages[400];
+        client_response[active_client] = HTTP400 + server_conf.error_pages[400];
     }
     data_start += 4;
     std::string file_data = file_content.substr(data_start);
@@ -172,7 +110,7 @@ void SeverManager::handlePostUpload(std::string request, std::string server_root
     fd_upload = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
 
 	struct pollfd write_pipe = {fd_write[1], POLLOUT, 0};
-	this->fds.push_back(write_pipe);
+	fds.push_back(write_pipe);
 
 	struct pollfd changed_client = { this->active_client, POLLERR, 0 };
 	fds.push_back(changed_client);
@@ -181,13 +119,13 @@ void SeverManager::handlePostUpload(std::string request, std::string server_root
 void ServerManager::handlePost(std::string request, std::string request_path, std::string server_root){
 	std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-        return HTTP400 + this->active_server.error_pages[400];
+        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
     }
 
     std::string headers = request.substr(0, header_end);
     std::size_t content_length_pos = headers.find("Content-Length: ");
     if (content_length_pos == std::string::npos) {
-        return HTTP411 + this->active_server.error_pages[411];
+        client_response[active_client] = HTTP411 + this->server_conf.error_pages[411];
     }
 
     std::string content_length = headers.substr(content_length_pos + 16);
@@ -198,7 +136,7 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
 
     std::size_t content_type_pos = headers.find("Content-Type: ");
     if (content_type_pos == std::string::npos) {
-        return HTTP415 + this->active_server.error_pages[415];
+        client_response[active_client] = HTTP415 + this->server_conf.error_pages[415];
     }
 
     std::string content_type = headers.substr(content_type_pos + 14);
@@ -236,13 +174,10 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
 	close(fd_write[0]);
 
 	struct pollfd write_pipe = {fd_write[1], POLLOUT, 0};
-	this->fds.push_back(write_pipe);
+	fds.push_back(write_pipe);
 
 	struct pollfd read_pipe = {fd_read[0], POLLIN, 0};
-	this->fds.push_back(read_pipe);
-
-    struct pollfd changed_client = { this->active_client, POLLERR, 0 };
-	fds.push_back(changed_client);
+	fds.push_back(read_pipe);
 }
 
 void ServerManager::getFile(std::string request_path, std::string server_root, std::string cgi, std::string request) {
@@ -260,42 +195,93 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 		std::string quri = request.substr(start, end - start);
 		setenv("QUERY_STRING", quri.c_str(), 1);
 
-		if (pipe(pipe_fd) == -1) {
-			return HTTP500 + server_conf.error_pages[500];
+		int pipes[2];
+		if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1){
+			client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
 		}
-
 		pid_t pid = fork();
-		if (pid == -1) {
-			return HTTP500 + server_conf.error_pages[500];
+		if (pid == -1){
+			client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
 		}
-
-		if (pid == 0) {
-			close(pipe_fd[0]);
-			dup2(pipe_fd[1], STDOUT_FILENO);
-			close(pipe_fd[1]);
+		if (pid == 0){
+			dup2(pipes[0], STDOUT_FILENO);
+			close(pipes[0]);
+			close(pipes[1]);
 
 			std::string command = "/usr/bin/php-cgi";
-			std::cout << command << std::endl;
 			char *const args[] = {const_cast<char *>(command.c_str()), const_cast<char *>(path.c_str()), NULL};
 			execve(args[0], args, environ);
 			exit(1);
 		} else {
-			close(pipe_fd[1]);
-			
-			struct pollfd new_fd = { pipe_fd[0], POLLIN, 0};
-			fds.push_back(new_fd);
+			struct pollfd socket = { pipes[1], POLLIN, 0 };
+			fds.push_back(socket);
+			fdcgi.push_back(pipes[1]);
+		}
+		return ;
+	}
+	std::ifstream file(path, std::ios::binary);
+	if (!file.is_open()){
+		client_response[active_client] = HTTP404 + server_conf.error_pages[404];
+	}
+	std::stringstream body;
+	body << file.rdbuf();
+	file.close();
 
-			struct pollfd changed_client = { this->active_client, POLLERR, 0 };
-			fds.push_back(changed_client);
+	std::stringstream content_length; 
+	content_length << body.str().size();
+
+	client_response[active_client] = "HTTPHTTP/1.1 200 OK\r\n";
+	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)); + "\r\n";
+	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n";
+}
+
+void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
+	std::istringstream req_stream(request);
+	std::string method, path, protocol;
+	std::size_t index = 0;
+
+	req_stream >> method >> path >> protocol;
+
+	std::size_t last_bar = path.find_last_of("/");
+	std::string directory_path = path.substr(0, last_bar);
+	std::string file = path.substr(last_bar);
+
+	for (std::size_t i = 0; i < server_conf.locations.size(); i++) {
+		if (server_conf.locations[i].path == directory_path) {
+			index = i;
+			break;
 		}
 	}
-	file_to_get = open(path.c_str(), O_RDONLY);
 
-	struct pollfd new_fd = { file_to_get, POLLIN, 0};
-	fds.push_back(new_fd);
+	if (server_conf.locations[index].limits.empty()){
+		server_conf.locations[index].limits.push_back("NONE");
+	}
 
-	struct pollfd changed_client = { this->active_client, POLLERR, 0 };
-	fds.push_back(changed_client);
+	if (!server_conf.locations[index].redirect_target.empty()) {
+		std::map<int, std::string>::iterator it = server_conf.locations[index].redirect_target.begin();
+		int code = it->first;
+		std::string loc = it->second;
+		if (code == 301) {
+			client_response[active_client] = "HTTP/1.1 301 Moved Permanently\r\nLocation: " + loc + file + "\r\n\r\n";
+		}
+	} else if (method == "GET") {
+		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")) {
+			if (path == "/") { path = "/" + server_conf.locations[index].index; }
+			getFile(path, server_conf.locations[index].root, server_conf.cgi, request);
+		}
+		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
+	} else if (method == "POST") {
+		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "POST")) {
+			if (path == "/upload") { handlePostUpload(request, server_conf.locations[index].root); }
+			else { handlePost(request, path, server_conf.locations[index].root); }
+		}
+		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
+	} else if (method == "DELETE") {
+		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "DELETE")) { 
+			handle_delete(server_conf.locations[index].root, request);
+		}
+		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
+	}
 }
 
 int ServerManager::checkLimits(std::vector<std::string> limits, std::string search) const{
@@ -346,4 +332,53 @@ ConfigParser::Server ServerManager::getServersConf() {
  */
 void ServerManager::addConf(ConfigParser::Server server_conf) {
 	this->server_confs.push_back(server_conf);
+}
+
+std::string ServerManager::findExtension(const std::string& url) {
+    size_t pos = url.find_last_of('.');
+    
+    if (pos == std::string::npos || pos == url.length() - 1) {
+        return "";
+    }
+
+    return url.substr(pos + 1);
+}
+
+std::string ServerManager::getContentType(const std::string& extension){
+	if (extension == "txt")
+		return ("text/plain");
+	else if (extension == "csv")
+		return ("text/csv");
+	else if (extension == "html" || extension == "htm")
+		return ("text/html");
+	else if (extension == "json")
+		return ("application/json");
+	else if (extension == "xml")
+		return ("application/xml");
+	else if  (extension == "jpg" || extension == "jpeg")
+		return ("image/jpeg");
+	else if (extension  == "png")
+		return ("image/png");
+	else if (extension == "gif")
+		return ("image/gif");
+	else if (extension == "svg")
+		return ("image/svg+xml");
+	else if (extension == "mp3")
+		return ("audio/mpeg");
+	else if (extension == "mp4")
+		return ("video/mp4");
+	else if (extension == "wav")
+		return ("audio/wav");
+	else if (extension == "webm")
+		return ("video/webm");
+	else if (extension == "pdf")
+		return ("application/pdf");
+	else if (extension == "doc" || extension == "docx")
+		return ("applicaton/msword");
+	else if (extension == "xls" || extension == "xlsx")
+		return ("application/vnd.ms-excel");
+	else if (extension == "zip")
+		return ("application/zip");
+	else
+		return ("application/octet-stream");
 }
