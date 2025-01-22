@@ -104,7 +104,10 @@ pollinHandler(pollfd fd, std::vector<ServerManager> servers, std::size_t index) 
 			if (bytes > 0){
 				ConfigParser::Server server_conf = servers[i].getServerName(std::string(buffer, bytes));
 				server[i].server_conf = server_conf;
+				server[i].setActiveClient(fd.fd);
 				severs[i].handle_request(std::string(buffer, bytes), server_conf);
+				fds.erase(fds.begin() + index)
+				--index;
 			} else {
 				server[i].removeClient(fd.fd);
 				std::cout << "Envent: Client Disconnected: " << fd.fd << std::endl;

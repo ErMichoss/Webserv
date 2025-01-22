@@ -33,6 +33,10 @@ void ServerManager::removeClient(int fd) {
 	this->clients.erase(it, this->clients.end());
 }
 
+void ServerManager::setActiveClient(int fd) {
+	this->active_client = fd;
+}
+
 void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
 	std::istringstream req_stream(request);
 	std::string method, path, protocol;
@@ -91,6 +95,156 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 	}
 }
 
+bool ServerManager::deleteResource(std::string resource){
+	if (std::remove(resource.c_str()) == 0){
+		return true;
+	} else {
+		return false;
+	}
+}
+
+void ServerManager::handle_delete(std::string root, std::string request){
+	std::size_t pos = request.find(" ") + 1;
+	std::size_t pos_end = request.find(" ", pos);
+	std::string resource = root;
+	resource += request.substr(pos, pos_end - pos);
+	std::cout << resource << std::endl;
+
+	if(deleteResource(resource)){
+		response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
+	} else {
+		response HTTP404 + server_conf.error_pages[404];
+	}
+}
+
+void SeverManager::handlePostUpload(std::string request, std::string server_root) {
+	std::size_t header_end = request.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        return HTTP400 + this->active_server.error_pages[400];
+    }
+
+    std::string headers = request.substr(0, header_end);
+    std::size_t content_length_pos = headers.find("Content-Length: ");
+    if (content_length_pos == std::string::npos) {
+        return HTTP411 + this->active_server.error_pages[411];
+    }
+
+    std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
+    if (content_type_pos == std::string::npos) {
+        return HTTP415 + this->active_server.error_pages[415];
+    }
+    std::string boundary_prefix = "boundary=";
+    std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
+    if (boundary_pos == std::string::npos) {
+        return HTTP400 + this->active_server.error_pages[400];
+    }
+    std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
+    boundary = boundary.substr(0, boundary.find("\r\n"));
+
+    std::string body = request.substr(header_end + 4);
+    std::size_t file_start = body.find(boundary);
+    if (file_start == std::string::npos) {
+        return HTTP400 + this->active_server.error_pages[400];
+    }
+    file_start += boundary.size() + 2;
+
+    std::size_t file_end = body.find(boundary, file_start);
+    if (file_end == std::string::npos) {
+        return HTTP400 + this->active_server.error_pages[400];
+    }
+    std::string file_content = body.substr(file_start, file_end - file_start);
+
+    std::size_t filename_pos = file_content.find("filename=\"");
+    if (filename_pos == std::string::npos) {
+        return HTTP400 + this->active_server.error_pages[400];
+    }
+    std::string filename = file_content.substr(filename_pos + 10);
+    filename = filename.substr(0, filename.find("\""));
+
+    std::size_t data_start = file_content.find("\r\n\r\n");
+    if (data_start == std::string::npos) {
+        return HTTP400 + this->active_server.error_pages[400];
+    }
+    data_start += 4;
+    std::string file_data = file_content.substr(data_start);
+
+    std::string file_path = server_root + "/" + filename;
+    fd_upload = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
+
+	struct pollfd write_pipe = {fd_write[1], POLLOUT, 0};
+	this->fds.push_back(write_pipe);
+
+	struct pollfd changed_client = { this->active_client, POLLERR, 0 };
+	fds.push_back(changed_client);
+}
+
+void ServerManager::handlePost(std::string request, std::string request_path, std::string server_root){
+	std::size_t header_end = request.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        return HTTP400 + this->active_server.error_pages[400];
+    }
+
+    std::string headers = request.substr(0, header_end);
+    std::size_t content_length_pos = headers.find("Content-Length: ");
+    if (content_length_pos == std::string::npos) {
+        return HTTP411 + this->active_server.error_pages[411];
+    }
+
+    std::string content_length = headers.substr(content_length_pos + 16);
+    std::size_t content_length_end = content_length.find("\r\n");
+    if (content_length_end != std::string::npos) {
+        content_length = content_length.substr(0, content_length_end);
+    }
+
+    std::size_t content_type_pos = headers.find("Content-Type: ");
+    if (content_type_pos == std::string::npos) {
+        return HTTP415 + this->active_server.error_pages[415];
+    }
+
+    std::string content_type = headers.substr(content_type_pos + 14);
+    std::size_t content_type_end = content_type.find("\r\n");
+    if (content_type_end != std::string::npos) {
+        content_type = content_type.substr(0, content_type_end);
+    }
+
+    setenv("REQUEST_METHOD", "POST", 1);
+    setenv("CONTENT_TYPE", content_type.c_str(), 1);
+    setenv("CONTENT_LENGTH", content_length.c_str() , 1);
+    setenv("SCRIPT_FILENAME", (server_root + request_path).c_str(), 1);
+    setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
+    setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
+    setenv("REDIRECT_STATUS", "1", 1);
+
+	std::string body = request.substr(header_end + 4);
+
+	pipe(fd_read);
+	pipe(fd_write);
+	pid_t pid = fork();
+	if (pid == 0){
+		char* matriz[2];
+		matriz[0] = (char *)"php-cgi";
+		matriz[1] = NULL;
+		dup2(fd_read[1], 1);
+		close(fd_read[0]);
+		close(fd_read[1]);
+		dup2(fd_write[0], 0);
+		close(fd_write[1]);
+		close(fd_write[0]);
+		execve("/usr/bin/php-cgi", matriz, environ);
+		exit(EXIT_FAILURE);
+	}
+	close(fd_write[0]);
+
+	struct pollfd write_pipe = {fd_write[1], POLLOUT, 0};
+	this->fds.push_back(write_pipe);
+
+	struct pollfd read_pipe = {fd_read[0], POLLIN, 0};
+	this->fds.push_back(read_pipe);
+
+    struct pollfd changed_client = { this->active_client, POLLERR, 0 };
+	fds.push_back(changed_client);
+}
+
 void ServerManager::getFile(std::string request_path, std::string server_root, std::string cgi, std::string request) {
 	std::string path = server_root + request_path;
 	if (path.find(".php") != std::string::npos && !cgi.empty()) {
@@ -106,7 +260,6 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 		std::string quri = request.substr(start, end - start);
 		setenv("QUERY_STRING", quri.c_str(), 1);
 
-		int pipe_fd[2];
 		if (pipe(pipe_fd) == -1) {
 			return HTTP500 + server_conf.error_pages[500];
 		}
@@ -131,8 +284,18 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 			
 			struct pollfd new_fd = { pipe_fd[0], POLLIN, 0};
 			fds.push_back(new_fd);
+
+			struct pollfd changed_client = { this->active_client, POLLERR, 0 };
+			fds.push_back(changed_client);
 		}
 	}
+	file_to_get = open(path.c_str(), O_RDONLY);
+
+	struct pollfd new_fd = { file_to_get, POLLIN, 0};
+	fds.push_back(new_fd);
+
+	struct pollfd changed_client = { this->active_client, POLLERR, 0 };
+	fds.push_back(changed_client);
 }
 
 int ServerManager::checkLimits(std::vector<std::string> limits, std::string search) const{
