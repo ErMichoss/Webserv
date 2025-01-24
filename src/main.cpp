@@ -80,45 +80,83 @@ void setSocketLinger(int socket_df)
     	perror("setsockopt(SO_LINGER) failed");
 }
 
-void pollinHandler(struct pollfd fd, std::vector<ServerManager> servers, std::size_t* index) {
-	for (std::size_t i = 0; i < servers.size(); i++) {
-		if (fd.fd == servers[i].getServerFd()) {
-			struct sockaddr_in client;
-			socklen_t client_len = sizeof(client);
-			int client_fd = accept(servers[i].getServerFd(), (struct sockaddr*)&client, &client_len);
-			if (client_fd >= 0) {
-				struct pollfd poll_client = { client_fd, POLLIN, 0 };
-				fds.push_back(poll_client);
-				servers[i].addClient(client_fd);
-			} else {
-				std::cerr << "Error: Client could no connect" << std::endl;
-			}
-		} else if (std::find(
-			servers[i].getClients().begin(),
-			servers[i].getClients().end(),
-			fd.fd
-		) != servers[i].getClients().end()) {
-			char buffer[BUFFER_SIZE];
-			std::memset (buffer, 0, sizeof(buffer));
-			ssize_t bytes = read(fd.fd, buffer, sizeof(buffer));
-			if (bytes > 0){
-				ConfigParser::Server server_conf = servers[i].getServerName(std::string(buffer, bytes));
-				servers[i].server_conf = server_conf;
-				servers[i].setActiveClient(fd.fd);
-				servers[i].handle_request(std::string(buffer, bytes), server_conf);
-				fds.erase(fds.begin() + (int)index);
-				--index;
-				struct pollfd client_out = { fd.fd, POLLOUT, 0};
-				fds.push_back(client_out);
-			} else {
-				servers[i].removeClient(fd.fd);
-				std::cout << "Envent: Client Disconnected: " << fd.fd << std::endl;
-				close(fd.fd);
-				fds.erase(fds.begin() + (int)index);
-				--index;
-			}
-		}
-	}
+void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::size_t* index) {
+    for (std::size_t i = 0; i < servers.size(); i++) {
+        if (fd.fd == servers[i].getServerFd()) {
+            struct sockaddr_in client;
+            socklen_t client_len = sizeof(client);
+            int client_fd = accept(servers[i].getServerFd(), (struct sockaddr*)&client, &client_len);
+            if (client_fd >= 0) {
+                struct pollfd poll_client = { client_fd, POLLIN, 0 };
+                fds.push_back(poll_client);
+                servers[i].addClient(client_fd);
+				std::cout << "Event: Client connected" << std::endl;
+            } else {
+                std::cerr << "Error: Client could not connect" << std::endl;
+            }
+        } else if (!servers[i].clients.empty() && std::find(
+            servers[i].getClients().begin(),
+            servers[i].getClients().end(),
+            fd.fd
+        ) != servers[i].getClients().end()) {
+            char buffer[BUFFER_SIZE];
+            std::memset(buffer, 0, sizeof(buffer));
+            ssize_t bytes = read(fd.fd, buffer, sizeof(buffer));
+            if (bytes > 0) {
+                ConfigParser::Server server_conf = servers[i].getServerName(std::string(buffer, bytes));
+                servers[i].server_conf = server_conf;
+                servers[i].setActiveClient(fd.fd);
+                servers[i].handle_request(std::string(buffer, bytes), server_conf);
+				std::cout << "Client handeled" << std::endl;
+                std::vector<struct pollfd>::iterator it = fds.begin() + *index;
+                fds.erase(it);
+				struct pollfd client_stop = { fd.fd, POLLOUT, 0 };
+    			fds.push_back(client_stop);
+                --(*index);
+            } else {
+                servers[i].removeClient(fd.fd);
+                std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
+                close(fd.fd);
+
+                std::vector<struct pollfd>::iterator it = fds.begin() + *index;
+                fds.erase(it);
+                --(*index);
+            }
+        } else if (std::find(
+            servers[i].getFdCgiIn().begin(),
+            servers[i].getFdCgiIn().end(),
+            fd.fd
+        ) != servers[i].getFdCgiIn().end()) {
+			std::cout << "Event: Pipe Reads" << std::cout;
+            servers[i].readCgi(fd.fd);
+        }
+    }
+}
+
+void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::size_t* index) {
+	std::cout << "detecta el POLLOUT" << std::endl;
+    for (std::size_t i = 0; i < servers.size(); i++) {
+        if (std::find(
+            servers[i].getClients().begin(),
+            servers[i].getClients().end(),
+            fd.fd
+        ) != servers[i].getClients().end()) {
+            send(fd.fd, servers[i].client_response[fd.fd].c_str(), servers[i].client_response[fd.fd].size(), 0);
+			std::cout << "Event: Response sended" << std::cout;
+            servers[i].removeClient(fd.fd);
+            std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
+            close(fd.fd);
+
+            std::vector<struct pollfd>::iterator it = fds.begin() + *index;
+            fds.erase(it);
+            --(*index);
+        } else if (std::find(
+            servers[i].getFdCgiOut().begin(),
+            servers[i].getFdCgiOut().end(),
+            fd.fd
+        ) != servers[i].getFdCgiOut().end()) {
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -161,10 +199,11 @@ int main(int argc, char *argv[]) {
 			running = false;
 			break;
 		}
-
 		for (std::size_t i = 0; i < fds.size(); i++) {
 			if (fds[i].revents & POLLIN) {
 				pollinHandler(fds[i], servers, &i);
+			} else if (fds[i].revents & POLLOUT) {
+				polloutHandler(fds[i], servers, &i);
 			}
 		}
 	}

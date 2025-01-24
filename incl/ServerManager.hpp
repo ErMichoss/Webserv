@@ -11,14 +11,16 @@ class ServerManager{
 		//Public Atributes
 		ConfigParser::Server server_conf;
 		std::map<int, std::string> client_response;
+		std::vector<int> clients;
+		std::vector<int> fdcgi_in;
+		std::vector<int> fdcgi_out;
 		
 	private:
 		//Atributes
 		std::vector<ConfigParser::Server> server_confs;
-		std::vector<int> clients;
+		std::map<int, int> pipe_client;
 		int active_client;
 		
-		std::vector<int> fdcgi;
 
 		int server_fd;
 		int fd_read[2];
@@ -41,6 +43,9 @@ class ServerManager{
 		std::vector<int> getClients();
 		void removeClient(int fd);
 		void setActiveClient(int fd);
+		std::vector<int> getFdCgiIn();
+		std::vector<int> getFdCgiOut();
+		void readCgi(int pipe);
 
 		void handle_request(std::string const request, ConfigParser::Server server_conf);
 

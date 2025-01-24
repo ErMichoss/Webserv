@@ -14,6 +14,14 @@ int ServerManager::getServerFd() {
 	return this->server_fd;
 }
 
+std::vector<int> ServerManager::getFdCgiIn() {
+	return this->fdcgi_in;
+}
+
+std::vector<int> ServerManager::getFdCgiOut() {
+	return this->fdcgi_out;
+}
+
 void ServerManager::addClient(int fd) {
 	this->clients.push_back(fd);
 }
@@ -30,6 +38,32 @@ void ServerManager::removeClient(int fd) {
 
 void ServerManager::setActiveClient(int fd) {
 	this->active_client = fd;
+}
+
+void ServerManager::readCgi(int pipe) {
+	char buffer[BUFFER_SIZE];
+	int client_id = pipe_client[pipe];
+	client_response[client_id] = "HTTP/1.1 200 OK\r\n";
+	std::string aux;
+
+	ssize_t bytes_read = 0;
+	while ((bytes_read == read(pipe, buffer, sizeof(buffer))) > 0) {
+		aux.append(buffer, bytes_read);
+	}
+	close(pipe);
+	std::size_t header_end = aux.find("\r\n\r\n");
+	if (header_end == std::string::npos) {
+		client_response[client_id] = HTTP400 + server_conf.error_pages[400];
+	}
+	std::string content = aux.substr(header_end + 4);
+	client_response[client_id] += "Connection: close\r\n";
+	client_response[client_id] += "Content-Lenght: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
+	client_response[client_id] += "Content-Type: text/html\r\n";
+	client_response[client_id] += aux;
+	std::vector<int>::iterator it = std::remove(this->clients.begin(), this->clients.end(), client_id);
+	this->clients.erase(it, this->clients.end());
+	struct pollfd client_out = { client_id, POLLOUT, 0 };
+	fds.push_back(client_out);
 }
 
 
@@ -108,12 +142,6 @@ void ServerManager::handlePostUpload(std::string request, std::string server_roo
 
     std::string file_path = server_root + "/" + filename;
     fd_upload = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
-
-	struct pollfd write_pipe = {fd_write[1], POLLOUT, 0};
-	fds.push_back(write_pipe);
-
-	struct pollfd changed_client = { this->active_client, POLLERR, 0 };
-	fds.push_back(changed_client);
 }
 
 void ServerManager::handlePost(std::string request, std::string request_path, std::string server_root){
@@ -155,29 +183,36 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
 
 	std::string body = request.substr(header_end + 4);
 
-	pipe(fd_read);
-	pipe(fd_write);
-	pid_t pid = fork();
-	if (pid == 0){
-		char* matriz[2];
-		matriz[0] = (char *)"php-cgi";
-		matriz[1] = NULL;
-		dup2(fd_read[1], 1);
-		close(fd_read[0]);
-		close(fd_read[1]);
-		dup2(fd_write[0], 0);
-		close(fd_write[1]);
-		close(fd_write[0]);
-		execve("/usr/bin/php-cgi", matriz, environ);
-		exit(EXIT_FAILURE);
-	}
-	close(fd_write[0]);
+	int pipes[2];
+if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1) {
+    client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
+    return;
+}
 
-	struct pollfd write_pipe = {fd_write[1], POLLOUT, 0};
-	fds.push_back(write_pipe);
+pid_t pid = fork();
+if (pid == -1) {
+    client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
+    return;
+}
 
-	struct pollfd read_pipe = {fd_read[0], POLLIN, 0};
-	fds.push_back(read_pipe);
+if (pid == 0) {
+    dup2(pipes[0], STDOUT_FILENO);
+    dup2(pipes[0], STDIN_FILENO); 
+    close(pipes[0]);
+    close(pipes[1]);
+
+    std::string command = "/usr/bin/php-cgi";
+
+    char *const args[] = {const_cast<char *>(command.c_str()), const_cast<char *>(request_path.c_str()), NULL};
+    execve(args[0], args, environ);
+    exit(1);
+} else {
+    struct pollfd socket = { pipes[1], POLLOUT, 0 };
+    fds.push_back(socket);
+    fdcgi_out.push_back(pipes[1]);
+}
+return;
+
 }
 
 void ServerManager::getFile(std::string request_path, std::string server_root, std::string cgi, std::string request) {
@@ -215,7 +250,10 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 		} else {
 			struct pollfd socket = { pipes[1], POLLIN, 0 };
 			fds.push_back(socket);
-			fdcgi.push_back(pipes[1]);
+			fdcgi_in.push_back(pipes[1]);
+			pipe_client[pipes[1]] = active_client;
+			struct pollfd client_stop = { active_client, POLLERR, 0 };
+            fds.push_back(client_stop);
 		}
 		return ;
 	}
@@ -231,8 +269,9 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	content_length << body.str().size();
 
 	client_response[active_client] = "HTTPHTTP/1.1 200 OK\r\n";
-	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)); + "\r\n";
+	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)) + "\r\n";
 	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n";
+	std::cout << "Response writen" << std::endl;
 }
 
 void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
@@ -257,20 +296,21 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 		server_conf.locations[index].limits.push_back("NONE");
 	}
 
-	if (!server_conf.locations[index].redirect_target.empty()) {
+	/*if (!server_conf.locations[index].redirect_target.empty()) {
 		std::map<int, std::string>::iterator it = server_conf.locations[index].redirect_target.begin();
 		int code = it->first;
 		std::string loc = it->second;
 		if (code == 301) {
 			client_response[active_client] = "HTTP/1.1 301 Moved Permanently\r\nLocation: " + loc + file + "\r\n\r\n";
 		}
-	} else if (method == "GET") {
+	} else */if (method == "GET") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")) {
 			if (path == "/") { path = "/" + server_conf.locations[index].index; }
 			getFile(path, server_conf.locations[index].root, server_conf.cgi, request);
+			return ;
 		}
 		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
-	} else if (method == "POST") {
+	} /* else if (method == "POST") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "POST")) {
 			if (path == "/upload") { handlePostUpload(request, server_conf.locations[index].root); }
 			else { handlePost(request, path, server_conf.locations[index].root); }
@@ -281,7 +321,7 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 			handle_delete(server_conf.locations[index].root, request);
 		}
 		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
-	}
+	}*/
 }
 
 int ServerManager::checkLimits(std::vector<std::string> limits, std::string search) const{
