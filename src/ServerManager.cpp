@@ -233,10 +233,12 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 		int pipes[2];
 		if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1){
 			client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
+			return ;
 		}
 		pid_t pid = fork();
 		if (pid == -1){
 			client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
+			return ;
 		}
 		if (pid == 0){
 			dup2(pipes[0], STDOUT_FILENO);
@@ -260,6 +262,7 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	std::ifstream file(path, std::ios::binary);
 	if (!file.is_open()){
 		client_response[active_client] = HTTP404 + server_conf.error_pages[404];
+		return ;
 	}
 	std::stringstream body;
 	body << file.rdbuf();
@@ -270,7 +273,8 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 
 	client_response[active_client] = "HTTPHTTP/1.1 200 OK\r\n";
 	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)) + "\r\n";
-	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n";
+	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n\r\n";
+	client_response[active_client] += body.str();
 	std::cout << "Response writen" << std::endl;
 }
 
@@ -278,6 +282,7 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 	std::istringstream req_stream(request);
 	std::string method, path, protocol;
 	std::size_t index = 0;
+	client_response[active_client] = "";
 
 	req_stream >> method >> path >> protocol;
 
@@ -310,6 +315,7 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 			return ;
 		}
 		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
+		return ;
 	} /* else if (method == "POST") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "POST")) {
 			if (path == "/upload") { handlePostUpload(request, server_conf.locations[index].root); }

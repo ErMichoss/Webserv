@@ -127,7 +127,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
             servers[i].getFdCgiIn().end(),
             fd.fd
         ) != servers[i].getFdCgiIn().end()) {
-			std::cout << "Event: Pipe Reads" << std::cout;
+			std::cout << "Event: Pipe Reads" << std::endl;
             servers[i].readCgi(fd.fd);
         }
     }
@@ -142,7 +142,7 @@ void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::
             fd.fd
         ) != servers[i].getClients().end()) {
             send(fd.fd, servers[i].client_response[fd.fd].c_str(), servers[i].client_response[fd.fd].size(), 0);
-			std::cout << "Event: Response sended" << std::cout;
+			std::cout << "Event: Response sended" << std::endl;
             servers[i].removeClient(fd.fd);
             std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
             close(fd.fd);
