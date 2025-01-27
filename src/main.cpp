@@ -94,6 +94,13 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
             } else {
                 std::cerr << "Error: Client could not connect" << std::endl;
             }
+        } else if (std::find(
+            servers[i].getFdCgiIn().begin(),
+            servers[i].getFdCgiIn().end(),
+            fd.fd
+        ) != servers[i].getFdCgiIn().end()) {
+			std::cout << "Event: Pipe Reads" << std::endl;
+            servers[i].readCgi(fd.fd);
         } else if (!servers[i].clients.empty() && std::find(
             servers[i].getClients().begin(),
             servers[i].getClients().end(),
@@ -122,14 +129,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
                 fds.erase(it);
                 --(*index);
             }
-        } else if (std::find(
-            servers[i].getFdCgiIn().begin(),
-            servers[i].getFdCgiIn().end(),
-            fd.fd
-        ) != servers[i].getFdCgiIn().end()) {
-			std::cout << "Event: Pipe Reads" << std::endl;
-            servers[i].readCgi(fd.fd);
-        }
+		}
     }
 }
 

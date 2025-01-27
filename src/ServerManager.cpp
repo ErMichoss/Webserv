@@ -242,19 +242,22 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 			return ;
 		}
 		if (pid == 0){
-			dup2(pipes[0], STDOUT_FILENO);
-			close(pipes[0]);
+			dup2(pipes[1], STDOUT_FILENO);
 			close(pipes[1]);
+			close(pipes[0]);
 
 			std::string command = "/usr/bin/php-cgi";
 			char *const args[] = {const_cast<char *>(command.c_str()), const_cast<char *>(path.c_str()), NULL};
 			execve(args[0], args, environ);
 			exit(1);
 		} else {
-			struct pollfd socket = { pipes[1], POLLIN, 0 };
+			close(pipes[1]);
+			int status;
+			waitpid(pid, &status, 0);
+			struct pollfd socket = { pipes[0], POLLIN, 0 };
 			fds.push_back(socket);
-			fdcgi_in.push_back(pipes[1]);
-			pipe_client[pipes[1]] = active_client;
+			fdcgi_in.push_back(pipes[0]);
+			pipe_client[pipes[0]] = active_client;
 			stopped_value[active_client] = true;
 		}
 		return ;
