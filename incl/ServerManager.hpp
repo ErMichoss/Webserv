@@ -14,6 +14,7 @@ class ServerManager{
 		std::vector<int> clients;
 		std::vector<int> fdcgi_in;
 		std::vector<int> fdcgi_out;
+		std::map<int, bool> stopped_value;
 		
 	private:
 		//Atributes

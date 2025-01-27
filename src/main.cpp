@@ -90,7 +90,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
                 struct pollfd poll_client = { client_fd, POLLIN, 0 };
                 fds.push_back(poll_client);
                 servers[i].addClient(client_fd);
-				std::cout << "Event: Client connected" << std::endl;
+				std::cout << "Event: Client connected: " << client_fd << std::endl;
             } else {
                 std::cerr << "Error: Client could not connect" << std::endl;
             }
@@ -107,7 +107,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
                 servers[i].server_conf = server_conf;
                 servers[i].setActiveClient(fd.fd);
                 servers[i].handle_request(std::string(buffer, bytes), server_conf);
-				std::cout << "Client handeled" << std::endl;
+				std::cout << "Client handeled: " << fd.fd << std::endl;
                 std::vector<struct pollfd>::iterator it = fds.begin() + *index;
                 fds.erase(it);
 				struct pollfd client_stop = { fd.fd, POLLOUT, 0 };
@@ -134,15 +134,14 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
 }
 
 void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::size_t* index) {
-	std::cout << "detecta el POLLOUT" << std::endl;
     for (std::size_t i = 0; i < servers.size(); i++) {
         if (std::find(
             servers[i].getClients().begin(),
             servers[i].getClients().end(),
             fd.fd
-        ) != servers[i].getClients().end()) {
+        ) != servers[i].getClients().end() && servers[i].stopped_value[fd.fd] == false) {
             send(fd.fd, servers[i].client_response[fd.fd].c_str(), servers[i].client_response[fd.fd].size(), 0);
-			std::cout << "Event: Response sended" << std::endl;
+			std::cout << "Event: Response sended: " << fd.fd << std::endl;
             servers[i].removeClient(fd.fd);
             std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
             close(fd.fd);

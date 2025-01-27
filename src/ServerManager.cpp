@@ -49,11 +49,13 @@ void ServerManager::readCgi(int pipe) {
 	ssize_t bytes_read = 0;
 	while ((bytes_read == read(pipe, buffer, sizeof(buffer))) > 0) {
 		aux.append(buffer, bytes_read);
+		std::cout << buffer << std::endl;
 	}
 	close(pipe);
 	std::size_t header_end = aux.find("\r\n\r\n");
 	if (header_end == std::string::npos) {
 		client_response[client_id] = HTTP400 + server_conf.error_pages[400];
+		return ;
 	}
 	std::string content = aux.substr(header_end + 4);
 	client_response[client_id] += "Connection: close\r\n";
@@ -62,8 +64,7 @@ void ServerManager::readCgi(int pipe) {
 	client_response[client_id] += aux;
 	std::vector<int>::iterator it = std::remove(this->clients.begin(), this->clients.end(), client_id);
 	this->clients.erase(it, this->clients.end());
-	struct pollfd client_out = { client_id, POLLOUT, 0 };
-	fds.push_back(client_out);
+	stopped_value[client_id] = false;
 }
 
 
@@ -254,8 +255,7 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 			fds.push_back(socket);
 			fdcgi_in.push_back(pipes[1]);
 			pipe_client[pipes[1]] = active_client;
-			struct pollfd client_stop = { active_client, POLLERR, 0 };
-            fds.push_back(client_stop);
+			stopped_value[active_client] = true;
 		}
 		return ;
 	}
@@ -275,7 +275,7 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)) + "\r\n";
 	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n\r\n";
 	client_response[active_client] += body.str();
-	std::cout << "Response writen" << std::endl;
+	//std::cout << "Response writen" << std::endl;
 }
 
 void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
