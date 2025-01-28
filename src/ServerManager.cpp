@@ -40,6 +40,10 @@ void ServerManager::setActiveClient(int fd) {
 	this->active_client = fd;
 }
 
+void ServerManager::readErrorPages(std::string header, std::string body, int client){
+	client_response[client] = header + "Content-Length: " + ft_itoa(std::strlen(body.c_str())) + "\r\n\r\n" + body;
+}
+
 void ServerManager::readCgi(int pipe) {
 	char buffer[BUFFER_SIZE];
 	int client_id = pipe_client[pipe];
@@ -55,7 +59,7 @@ void ServerManager::readCgi(int pipe) {
 		if (header_end == std::string::npos) {
 			client_response[pipe].erase();
 			stopped_value[client_id] = false;
-			client_response[client_id] = HTTP400 "Content-Length: " + ft_itoa(std::strlen(server_conf.error_pages[400].c_str())) + "\r\n\r\n" + server_conf.error_pages[400];
+			readErrorPages(HTTP400, server_conf.error_pages[400], client_id);
 			return ;
 		}
 		std::string content = client_response[pipe].substr(header_end + 4);
@@ -83,32 +87,36 @@ void ServerManager::handle_delete(std::string root, std::string request) {
 	std::cout << resource << std::endl;
 
 	if(deleteResource(resource)){
-		client_response[active_client] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>200 DELETE/h1>";
+		client_response[active_client] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 19\r\n\r\n<h1>200 DELETE</h1>";
+		stopped_value[active_client] = false;
+		return ; 
 	} else {
 		client_response[active_client] = HTTP404 + server_conf.error_pages[404];
+		stopped_value[active_client] = false;
+		return ;
 	}
 }
 
 void ServerManager::handlePostUpload(std::string request, std::string server_root) {
 	std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
     }
 
     std::string headers = request.substr(0, header_end);
     std::size_t content_length_pos = headers.find("Content-Length: ");
     if (content_length_pos == std::string::npos) {
-        client_response[active_client] =  HTTP411 + this->server_conf.error_pages[411];
+        readErrorPages(HTTP411, server_conf.error_pages[411], active_client);
     }
 
     std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
     if (content_type_pos == std::string::npos) {
-        client_response[active_client] = HTTP415 + this->server_conf.error_pages[415];
+        readErrorPages(HTTP415, server_conf.error_pages[415], active_client);
     }
     std::string boundary_prefix = "boundary=";
     std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
     if (boundary_pos == std::string::npos) {
-        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
     }
     std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
     boundary = boundary.substr(0, boundary.find("\r\n"));
@@ -116,26 +124,26 @@ void ServerManager::handlePostUpload(std::string request, std::string server_roo
     std::string body = request.substr(header_end + 4);
     std::size_t file_start = body.find(boundary);
     if (file_start == std::string::npos) {
-        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
     }
     file_start += boundary.size() + 2;
 
     std::size_t file_end = body.find(boundary, file_start);
     if (file_end == std::string::npos) {
-        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
     }
     std::string file_content = body.substr(file_start, file_end - file_start);
 
     std::size_t filename_pos = file_content.find("filename=\"");
     if (filename_pos == std::string::npos) {
-        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
     }
     std::string filename = file_content.substr(filename_pos + 10);
     filename = filename.substr(0, filename.find("\""));
 
     std::size_t data_start = file_content.find("\r\n\r\n");
     if (data_start == std::string::npos) {
-        client_response[active_client] = HTTP400 + server_conf.error_pages[400];
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
     }
     data_start += 4;
     std::string file_data = file_content.substr(data_start);
@@ -147,13 +155,13 @@ void ServerManager::handlePostUpload(std::string request, std::string server_roo
 void ServerManager::handlePost(std::string request, std::string request_path, std::string server_root){
 	std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-        client_response[active_client] = HTTP400 + this->server_conf.error_pages[400];
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
     }
 
     std::string headers = request.substr(0, header_end);
     std::size_t content_length_pos = headers.find("Content-Length: ");
     if (content_length_pos == std::string::npos) {
-        client_response[active_client] = HTTP411 + this->server_conf.error_pages[411];
+        readErrorPages(HTTP411, server_conf.error_pages[411], active_client);
     }
 
     std::string content_length = headers.substr(content_length_pos + 16);
@@ -164,7 +172,7 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
 
     std::size_t content_type_pos = headers.find("Content-Type: ");
     if (content_type_pos == std::string::npos) {
-        client_response[active_client] = HTTP415 + this->server_conf.error_pages[415];
+        readErrorPages(HTTP415, server_conf.error_pages[415], active_client);
     }
 
     std::string content_type = headers.substr(content_type_pos + 14);
@@ -261,7 +269,7 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	}
 	std::ifstream file(path.c_str(), std::ios::binary);
 	if (!file.is_open()){
-		client_response[active_client] = HTTP404 + server_conf.error_pages[404];
+		readErrorPages(HTTP404, server_conf.error_pages[404], active_client);
 		return ;
 	}
 	std::stringstream body;
@@ -275,7 +283,6 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)) + "\r\n";
 	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n\r\n";
 	client_response[active_client] += body.str();
-	//std::cout << "Response writen" << std::endl;
 }
 
 void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
@@ -301,14 +308,14 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 		server_conf.locations[index].limits.push_back("NONE");
 	}
 
-	/*if (!server_conf.locations[index].redirect_target.empty()) {
+	if (!server_conf.locations[index].redirect_target.empty()) {
 		std::map<int, std::string>::iterator it = server_conf.locations[index].redirect_target.begin();
 		int code = it->first;
 		std::string loc = it->second;
 		if (code == 301) {
 			client_response[active_client] = "HTTP/1.1 301 Moved Permanently\r\nLocation: " + loc + file + "\r\n\r\n";
 		}
-	} else */if (method == "GET") {
+	} else if (method == "GET") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")) {
 			if (path == "/") { path = "/" + server_conf.locations[index].index; }
 			getFile(path, server_conf.locations[index].root, server_conf.cgi, request);
@@ -316,7 +323,7 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 		}
 		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
 		return ;
-	} /* else if (method == "POST") {
+	} else if (method == "POST") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "POST")) {
 			if (path == "/upload") { handlePostUpload(request, server_conf.locations[index].root); }
 			else { handlePost(request, path, server_conf.locations[index].root); }
@@ -327,7 +334,7 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 			handle_delete(server_conf.locations[index].root, request);
 		}
 		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
-	}*/
+	}
 }
 
 int ServerManager::checkLimits(std::vector<std::string> limits, std::string search) const{

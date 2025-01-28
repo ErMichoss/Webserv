@@ -57,6 +57,7 @@ class ServerManager{
 		void handlePost(std::string request, std::string request_path, std::string server_root);
 		void handlePostUpload(std::string request, std::string server_root);
 		void handle_delete(std::string root, std::string request);
+		void readErrorPages(std::string header, std::string body, int client);
 		bool deleteResource(std::string resource);
 		std::string findExtension(const std::string& url);
 		std::string getContentType(const std::string& extension);
