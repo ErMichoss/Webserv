@@ -3,6 +3,8 @@
 #include "ServerManager.hpp"
 #include <functional>
 
+bool running = true;
+std::vector<struct pollfd> fds;
 /**
  * @brief Creates a socket for a port and host of your choice.
  * 
@@ -94,18 +96,18 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
             } else {
                 std::cerr << "Error: Client could not connect" << std::endl;
             }
-        } else if (std::find(
-            servers[i].getFdCgiIn().begin(),
-            servers[i].getFdCgiIn().end(),
-            fd.fd
-        ) != servers[i].getFdCgiIn().end()) {
+			return ;
+        } else if (!servers[i].fdcgi_in.empty() && std::find(servers[i].fdcgi_in.begin(), servers[i].fdcgi_in.end(), fd.fd) != servers[i].fdcgi_in.end()) {
 			std::cout << "Event: Pipe Reads" << std::endl;
             servers[i].readCgi(fd.fd);
-        } else if (!servers[i].clients.empty() && std::find(
-            servers[i].getClients().begin(),
-            servers[i].getClients().end(),
-            fd.fd
-        ) != servers[i].getClients().end()) {
+			if (servers[i].stopped_value[servers[i].pipe_client[fd.fd]] == false){
+				std::cout << "borra el pipe " << *index << std::endl;
+				std::vector<struct pollfd>::iterator ss = fds.begin() + *index;
+                fds.erase(ss);
+			}
+			std::cout << "Event: Exits Pipe Reads" << std::endl;
+			return;
+        } else if (!servers[i].clients.empty() && std::find(servers[i].getClients().begin(), servers[i].getClients().end(), fd.fd) != servers[i].getClients().end()) {
             char buffer[BUFFER_SIZE];
             std::memset(buffer, 0, sizeof(buffer));
             ssize_t bytes = read(fd.fd, buffer, sizeof(buffer));
@@ -115,11 +117,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
                 servers[i].setActiveClient(fd.fd);
                 servers[i].handle_request(std::string(buffer, bytes), server_conf);
 				std::cout << "Client handeled: " << fd.fd << std::endl;
-                std::vector<struct pollfd>::iterator it = fds.begin() + *index;
-                fds.erase(it);
-				struct pollfd client_stop = { fd.fd, POLLOUT, 0 };
-    			fds.push_back(client_stop);
-                --(*index);
+                fds[*index].events = POLLOUT;
             } else {
                 servers[i].removeClient(fd.fd);
                 std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
@@ -127,33 +125,20 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
 
                 std::vector<struct pollfd>::iterator it = fds.begin() + *index;
                 fds.erase(it);
-                --(*index);
             }
+			return;
 		}
     }
 }
 
 void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::size_t* index) {
     for (std::size_t i = 0; i < servers.size(); i++) {
-        if (std::find(
-            servers[i].getClients().begin(),
-            servers[i].getClients().end(),
-            fd.fd
-        ) != servers[i].getClients().end() && servers[i].stopped_value[fd.fd] == false) {
+        if (std::find(servers[i].getClients().begin(), servers[i].getClients().end(), fd.fd) != servers[i].getClients().end() && servers[i].stopped_value[fd.fd] == false) {
             send(fd.fd, servers[i].client_response[fd.fd].c_str(), servers[i].client_response[fd.fd].size(), 0);
 			std::cout << "Event: Response sended: " << fd.fd << std::endl;
-            servers[i].removeClient(fd.fd);
-            std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
-            close(fd.fd);
-
-            std::vector<struct pollfd>::iterator it = fds.begin() + *index;
-            fds.erase(it);
-            --(*index);
-        } else if (std::find(
-            servers[i].getFdCgiOut().begin(),
-            servers[i].getFdCgiOut().end(),
-            fd.fd
-        ) != servers[i].getFdCgiOut().end()) {
+			fds[*index].events = POLLIN;
+			return;
+        } else if (std::find(servers[i].getFdCgiOut().begin(),servers[i].getFdCgiOut().end(), fd.fd) != servers[i].getFdCgiOut().end()) {
         }
     }
 }
@@ -192,17 +177,19 @@ int main(int argc, char *argv[]) {
 	}
 
 	while (running) {
-		int count = poll(&fds[0], fds.size(), -1);
+		std::vector<struct pollfd> copia = fds;
+		int count = poll(&copia[0], copia.size(), -1);
 		if (count < 0) {
 			std::cerr << "Error: There was an error in Poll";
 			running = false;
 			break;
 		}
-		for (std::size_t i = 0; i < fds.size(); i++) {
-			if (fds[i].revents & POLLIN) {
-				pollinHandler(fds[i], servers, &i);
-			} else if (fds[i].revents & POLLOUT) {
-				polloutHandler(fds[i], servers, &i);
+		// std::cout << "revents = " << count << std::endl;
+		for (std::size_t i = 0; i < copia.size(); i++) {
+			if (copia[i].revents & POLLIN) {
+				pollinHandler(copia[i], servers, &i);
+			} else if (copia[i].revents & POLLOUT) {
+				polloutHandler(copia[i], servers, &i);
 			}
 		}
 	}

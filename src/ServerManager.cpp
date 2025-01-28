@@ -44,27 +44,26 @@ void ServerManager::readCgi(int pipe) {
 	char buffer[BUFFER_SIZE];
 	int client_id = pipe_client[pipe];
 	client_response[client_id] = "HTTP/1.1 200 OK\r\n";
-	std::string aux;
 
-	ssize_t bytes_read = 0;
-	while ((bytes_read == read(pipe, buffer, sizeof(buffer))) > 0) {
-		aux.append(buffer, bytes_read);
-		std::cout << buffer << std::endl;
+	std::size_t bytes_read = 0;
+	bytes_read = read(pipe, buffer, sizeof(buffer));
+	if (bytes_read > 0){
+		client_response[pipe].append(buffer, bytes_read);
+	} else {
+		close(pipe);
+		std::size_t header_end = client_response[pipe].find("\r\n\r\n");
+		if (header_end == std::string::npos) {
+			client_response[pipe].erase();
+			stopped_value[client_id] = false;
+			client_response[client_id] = HTTP400 "Content-Length: " + ft_itoa(std::strlen(server_conf.error_pages[400].c_str())) + "\r\n\r\n" + server_conf.error_pages[400];
+			return ;
+		}
+		std::string content = client_response[pipe].substr(header_end + 4);
+		client_response[client_id] += "Content-Length: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
+		client_response[client_id] += client_response[pipe];
+		client_response[pipe].erase();
+		stopped_value[client_id] = false;
 	}
-	close(pipe);
-	std::size_t header_end = aux.find("\r\n\r\n");
-	if (header_end == std::string::npos) {
-		client_response[client_id] = HTTP400 + server_conf.error_pages[400];
-		return ;
-	}
-	std::string content = aux.substr(header_end + 4);
-	client_response[client_id] += "Connection: close\r\n";
-	client_response[client_id] += "Content-Lenght: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
-	client_response[client_id] += "Content-Type: text/html\r\n";
-	client_response[client_id] += aux;
-	std::vector<int>::iterator it = std::remove(this->clients.begin(), this->clients.end(), client_id);
-	this->clients.erase(it, this->clients.end());
-	stopped_value[client_id] = false;
 }
 
 
@@ -252,8 +251,6 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 			exit(1);
 		} else {
 			close(pipes[1]);
-			int status;
-			waitpid(pid, &status, 0);
 			struct pollfd socket = { pipes[0], POLLIN, 0 };
 			fds.push_back(socket);
 			fdcgi_in.push_back(pipes[0]);
@@ -262,7 +259,7 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 		}
 		return ;
 	}
-	std::ifstream file(path, std::ios::binary);
+	std::ifstream file(path.c_str(), std::ios::binary);
 	if (!file.is_open()){
 		client_response[active_client] = HTTP404 + server_conf.error_pages[404];
 		return ;
@@ -274,7 +271,7 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	std::stringstream content_length; 
 	content_length << body.str().size();
 
-	client_response[active_client] = "HTTPHTTP/1.1 200 OK\r\n";
+	client_response[active_client] = "HTTP/1.1 200 OK\r\n";
 	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)) + "\r\n";
 	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n\r\n";
 	client_response[active_client] += body.str();

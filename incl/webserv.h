@@ -31,7 +31,7 @@
 # include "ServerManager.hpp"
 # include "ConfigParser.hpp"
 
-# define HTTP400 "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n"
+# define HTTP400 "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n"
 # define HTTP401 "HTTP/1.1 401 Unauthorized\r\nContent-Type: text/html\r\n\e\n"
 # define HTTP402 "HTTP/1.1 402 Payment Required\r\nContent-Type: text/html\r\n\r\n"
 # define HTTP403 "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\n\r\n"
@@ -80,8 +80,8 @@ extern char **environ;
 /**
  * Global variable to manage the server status.
  */
-static bool running = true;
-static std::vector<struct pollfd> fds;
+extern bool running;
+extern std::vector<struct pollfd> fds;
 
 //*** UTILS ***
 

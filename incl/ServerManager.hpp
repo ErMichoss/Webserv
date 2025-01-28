@@ -15,11 +15,11 @@ class ServerManager{
 		std::vector<int> fdcgi_in;
 		std::vector<int> fdcgi_out;
 		std::map<int, bool> stopped_value;
+		std::map<int, int> pipe_client;
 		
 	private:
 		//Atributes
 		std::vector<ConfigParser::Server> server_confs;
-		std::map<int, int> pipe_client;
 		int active_client;
 		
 
