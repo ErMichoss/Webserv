@@ -44,15 +44,11 @@ void ServerManager::readErrorPages(std::string header, std::string body, int cli
 	client_response[client] = header + "Content-Length: " + ft_itoa(std::strlen(body.c_str())) + "\r\n\r\n" + body;
 }
 
-void ServerManager::writeUpload(int fd){
-	if (write(fd, to_write[fd].c_str(), to_write[fd].size()) == -1){
-		readErrorPages(HTTP500, server_conf.error_pages[500], pipe_client[fd]);
-		stopped_value[pipe_client[fd]] = false;
-		return;
-	}
-	close(fd);
-	client_response[pipe_client[fd]] = "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\nContetn-Length: 35\r\n\r\n<h1>File Uploaded Successfully</h1>";
-	stopped_value[pipe_client[fd]] = false;
+void ServerManager::writePOST(int fd){
+	send(fd, to_write[fd].c_str(), to_write[fd].size(), 0);
+	fdcgi_in.push_back(fd);
+	std::vector<int>::iterator it = std::remove(fdcgi_out.begin(), fdcgi_out.end(), fd);
+	fdcgi_out.erase(it, fdcgi_out.end());
 }
 
 void ServerManager::readCgi(int pipe) {
@@ -62,9 +58,27 @@ void ServerManager::readCgi(int pipe) {
 
 	std::size_t bytes_read = 0;
 	bytes_read = read(pipe, buffer, sizeof(buffer));
-	if (bytes_read > 0){
+	std::cout << bytes_read << std::endl;
+	if (bytes_read < sizeof(buffer)){
+		client_response[pipe].append(buffer, bytes_read);
+		std::cout << "Termina de leer" << std::endl;
+		close(pipe);
+		std::size_t header_end = client_response[pipe].find("\r\n\r\n");
+		if (header_end == std::string::npos) {
+			client_response[pipe].erase();
+			stopped_value[client_id] = false;
+			readErrorPages(HTTP400, server_conf.error_pages[400], client_id);
+			return ;
+		}
+		std::string content = client_response[pipe].substr(header_end + 4);
+		client_response[client_id] += "Content-Length: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
+		client_response[client_id] += client_response[pipe];
+		client_response[pipe].erase();
+		stopped_value[client_id] = false;
+	} else if (bytes_read > 0) {
 		client_response[pipe].append(buffer, bytes_read);
 	} else {
+		std::cout << "Termina de leer" << std::endl;
 		close(pipe);
 		std::size_t header_end = client_response[pipe].find("\r\n\r\n");
 		if (header_end == std::string::npos) {
@@ -106,75 +120,6 @@ void ServerManager::handle_delete(std::string root, std::string request) {
 	}
 }
 
-void ServerManager::handlePostUpload(std::string request, std::string server_root) {
-	std::size_t header_end = request.find("\r\n\r\n");
-    if (header_end == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-
-    std::string headers = request.substr(0, header_end);
-    std::size_t content_length_pos = headers.find("Content-Length: ");
-    if (content_length_pos == std::string::npos) {
-        readErrorPages(HTTP411, server_conf.error_pages[411], active_client);
-		return ;
-    }
-
-    std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
-    if (content_type_pos == std::string::npos) {
-        readErrorPages(HTTP415, server_conf.error_pages[415], active_client);
-		return ;
-    }
-    std::string boundary_prefix = "boundary=";
-    std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
-    if (boundary_pos == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
-    boundary = boundary.substr(0, boundary.find("\r\n"));
-
-    std::string body = request.substr(header_end + 4);
-    std::size_t file_start = body.find(boundary);
-    if (file_start == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    file_start += boundary.size() + 2;
-
-    std::size_t file_end = body.find(boundary, file_start);
-    if (file_end == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    std::string file_content = body.substr(file_start, file_end - file_start);
-
-    std::size_t filename_pos = file_content.find("filename=\"");
-    if (filename_pos == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    std::string filename = file_content.substr(filename_pos + 10);
-    filename = filename.substr(0, filename.find("\""));
-
-    std::size_t data_start = file_content.find("\r\n\r\n");
-    if (data_start == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    data_start += 4;
-    std::string file_data = file_content.substr(data_start);
-
-    std::string file_path = server_root + "/" + filename;
-    fd_upload = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
-	struct pollfd socket = { fd_upload, POLLOUT, 0 };
-    fds.push_back(socket);
-	fd_to_upload.push_back(fd_upload);
-	pipe_client[fd_upload] = active_client;
-	to_write[fd_upload] = file_data;
-	stopped_value[active_client] = true;
-}
-
 void ServerManager::handlePost(std::string request, std::string request_path, std::string server_root){
 	std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
@@ -188,36 +133,29 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
         readErrorPages(HTTP411, server_conf.error_pages[411], active_client);
 		return ;
     }
-
     std::string content_length = headers.substr(content_length_pos + 16);
     std::size_t content_length_end = content_length.find("\r\n");
     if (content_length_end != std::string::npos) {
         content_length = content_length.substr(0, content_length_end);
-		return ;
     }
-
     std::size_t content_type_pos = headers.find("Content-Type: ");
     if (content_type_pos == std::string::npos) {
         readErrorPages(HTTP415, server_conf.error_pages[415], active_client);
 		return ;
     }
-
     std::string content_type = headers.substr(content_type_pos + 14);
     std::size_t content_type_end = content_type.find("\r\n");
     if (content_type_end != std::string::npos) {
         content_type = content_type.substr(0, content_type_end);
-		return ;
     }
-
     setenv("REQUEST_METHOD", "POST", 1);
     setenv("CONTENT_TYPE", content_type.c_str(), 1);
-    setenv("CONTENT_LENGTH", content_length.c_str() , 1);
     setenv("SCRIPT_FILENAME", (server_root + request_path).c_str(), 1);
     setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
     setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
     setenv("REDIRECT_STATUS", "1", 1);
-
 	std::string body = request.substr(header_end + 4);
+	setenv("CONTENT_LENGTH", ft_itoa(std::strlen(body.c_str())).c_str() , 1);
 
 	int pipes[2];
 if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1) {
@@ -246,6 +184,9 @@ if (pid == 0) {
     struct pollfd socket = { pipes[1], POLLOUT, 0 };
     fds.push_back(socket);
     fdcgi_out.push_back(pipes[1]);
+	pipe_client[pipes[1]] = active_client;
+	to_write[pipes[1]] = body;
+	stopped_value[active_client] = true;
 }
 return;
 
@@ -349,19 +290,22 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 			getFile(path, server_conf.locations[index].root, server_conf.cgi, request);
 			return ;
 		}
-		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
+		readErrorPages(HTTP405, server_conf.error_pages[405], active_client);
 		return ;
 	} else if (method == "POST") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "POST")) {
-			if (path == "/upload") { handlePostUpload(request, server_conf.locations[index].root); }
-			else { handlePost(request, path, server_conf.locations[index].root); }
+			handlePost(request, path, server_conf.locations[index].root);
+			return ;
 		}
-		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
+		readErrorPages(HTTP405, server_conf.error_pages[405], active_client);
+		return ;
 	} else if (method == "DELETE") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "DELETE")) { 
 			handle_delete(server_conf.locations[index].root, request);
+			return ;
 		}
-		client_response[active_client] = HTTP405 + server_conf.error_pages[405];
+		readErrorPages(HTTP405, server_conf.error_pages[405], active_client);
+		return ;
 	}
 }
 

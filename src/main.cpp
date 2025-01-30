@@ -133,17 +133,18 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
 
 void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::size_t* index) {
     for (std::size_t i = 0; i < servers.size(); i++) {
-        if (std::find(servers[i].getClients().begin(), servers[i].getClients().end(), fd.fd) != servers[i].getClients().end() && servers[i].stopped_value[fd.fd] == false) {
+        if (std::find(servers[i].clients.begin(), servers[i].clients.end(), fd.fd) != servers[i].clients.end() && servers[i].stopped_value[fd.fd] == false) {
             send(fd.fd, servers[i].client_response[fd.fd].c_str(), servers[i].client_response[fd.fd].size(), 0);
 			std::cout << "Event: Response sended: " << fd.fd << std::endl;
 			fds[*index].events = POLLIN;
 			return;
         } else if (std::find(servers[i].fdcgi_out.begin(),servers[i].fdcgi_out.end(), fd.fd) != servers[i].fdcgi_out.end()) {
-        } else if (std::find(servers[i].fd_to_upload.begin(), servers[i].fd_to_upload.end(), fd.fd) != servers[i].fd_to_upload.end()) {
-			servers[i].writeUpload(fd.fd);
-			std::vector<struct pollfd>::iterator ss = fds.begin() + *index;
-            fds.erase(ss);
-		}
+			std::cout << "Event: Entra a escribir en Pipe" << std::endl;
+			servers[i].writePOST(fd.fd);
+			fds[*index].events = POLLIN;
+			std::cout << "Event: Sale de escribir en Pipe" << std::endl;
+			return;
+        }
     }
 }
 
@@ -188,7 +189,6 @@ int main(int argc, char *argv[]) {
 			running = false;
 			break;
 		}
-		// std::cout << "revents = " << count << std::endl;
 		for (std::size_t i = 0; i < copia.size(); i++) {
 			if (copia[i].revents & POLLIN) {
 				pollinHandler(copia[i], servers, &i);

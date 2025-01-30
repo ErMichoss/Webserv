@@ -14,7 +14,6 @@ class ServerManager{
 		std::vector<int> clients;
 		std::vector<int> fdcgi_in;
 		std::vector<int> fdcgi_out;
-		std::vector<int> fd_to_upload;
 		std::map<int, bool> stopped_value;
 		std::map<int, int> pipe_client;
 		
@@ -49,7 +48,7 @@ class ServerManager{
 		std::vector<int> getFdCgiIn();
 		std::vector<int> getFdCgiOut();
 		void readCgi(int pipe);
-		void writeUpload(int fd);
+		void writePOST(int fd);
 
 		void handle_request(std::string const request, ConfigParser::Server server_conf);
 
