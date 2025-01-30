@@ -49,6 +49,7 @@ class ServerManager{
 		std::vector<int> getFdCgiIn();
 		std::vector<int> getFdCgiOut();
 		void readCgi(int pipe);
+		void writeUpload(int fd);
 
 		void handle_request(std::string const request, ConfigParser::Server server_conf);
 

@@ -44,7 +44,7 @@ void ServerManager::readErrorPages(std::string header, std::string body, int cli
 	client_response[client] = header + "Content-Length: " + ft_itoa(std::strlen(body.c_str())) + "\r\n\r\n" + body;
 }
 
-void writeUpload(int fd){
+void ServerManager::writeUpload(int fd){
 	if (write(fd, to_write[fd].c_str(), to_write[fd].size()) == -1){
 		readErrorPages(HTTP500, server_conf.error_pages[500], pipe_client[fd]);
 		stopped_value[pipe_client[fd]] = false;

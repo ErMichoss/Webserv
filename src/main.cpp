@@ -138,8 +138,12 @@ void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::
 			std::cout << "Event: Response sended: " << fd.fd << std::endl;
 			fds[*index].events = POLLIN;
 			return;
-        } else if (std::find(servers[i].getFdCgiOut().begin(),servers[i].getFdCgiOut().end(), fd.fd) != servers[i].getFdCgiOut().end()) {
-        }
+        } else if (std::find(servers[i].fdcgi_out.begin(),servers[i].fdcgi_out.end(), fd.fd) != servers[i].fdcgi_out.end()) {
+        } else if (std::find(servers[i].fd_to_upload.begin(), servers[i].fd_to_upload.end(), fd.fd) != servers[i].fd_to_upload.end()) {
+			servers[i].writeUpload(fd.fd);
+			std::vector<struct pollfd>::iterator ss = fds.begin() + *index;
+            fds.erase(ss);
+		}
     }
 }
 
