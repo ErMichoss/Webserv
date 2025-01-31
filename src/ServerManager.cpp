@@ -159,13 +159,13 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
 
 	int pipes[2];
 if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1) {
-    client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
+    readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
     return;
 }
 
 pid_t pid = fork();
 if (pid == -1) {
-    client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
+    readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
     return;
 }
 
@@ -192,9 +192,42 @@ return;
 
 }
 
+void ServerManager::getDir(std::string path, std::string uri){
+	struct dirent *read_dir;
+	DIR* dir = opendir(path.c_str());
+
+	if (dir == NULL){
+		readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
+		return;
+	}
+	std::string html = "<ul>";
+	while ((read_dir = readdir(dir))){
+		html += "<li><a src='" + uri + "/" + read_dir->d_name + "'>" + read_dir->d_name + "</a></li>";
+	}
+	html += "</ul>";
+	client_response[active_client] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+	client_response[active_client] += "Content-Length: " + ft_itoa(std::strlen(html.c_str())) + "\r\n\r\n";
+	client_response[active_client] += html;
+}
+
 void ServerManager::getFile(std::string request_path, std::string server_root, std::string cgi, std::string request) {
 	std::string path = server_root + request_path;
-	if (path.find(".php") != std::string::npos && !cgi.empty()) {
+	struct stat statbuf;
+	std::memset(&statbuf, 0, sizeof(statbuf));
+	if (stat(path.c_str(), &statbuf) == -1) {
+		std::cout << "path: " + path << std::endl;
+		readErrorPages(HTTP404, server_conf.error_pages[404], active_client);
+	}
+	if (S_ISDIR(statbuf.st_mode) && !server_conf.locations[_location].index.empty()){
+		path += server_conf.locations[_location].index;
+		std::cout << "path: " + path << std::endl;
+	} else if (S_ISDIR(statbuf.st_mode) && server_conf.locations[_location].autoindex){
+		getDir(path, request_path);
+		return;
+	} else if (!S_ISREG(statbuf.st_mode)){
+		readErrorPages(HTTP404, server_conf.error_pages[404], active_client);
+	}
+	if (path.find("." + server_conf.cgi) != std::string::npos && !cgi.empty()) {
 		unsetenv("CONTENT_TYPE");
 		unsetenv("CONTENT_LENGTH");
 		setenv("REQUEST_METHOD", "GET", 1);
@@ -263,7 +296,7 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 	req_stream >> method >> path >> protocol;
 
 	std::size_t last_bar = path.find_last_of("/");
-	std::string directory_path = path.substr(0, last_bar);
+	std::string directory_path = path.substr(last_bar);
 	std::string file = path.substr(last_bar);
 
 	for (std::size_t i = 0; i < server_conf.locations.size(); i++) {
@@ -276,7 +309,7 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 	if (server_conf.locations[index].limits.empty()){
 		server_conf.locations[index].limits.push_back("NONE");
 	}
-
+	_location = index;
 	if (!server_conf.locations[index].redirect_target.empty()) {
 		std::map<int, std::string>::iterator it = server_conf.locations[index].redirect_target.begin();
 		int code = it->first;
@@ -286,7 +319,6 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 		}
 	} else if (method == "GET") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "GET")) {
-			if (path == "/") { path = "/" + server_conf.locations[index].index; }
 			getFile(path, server_conf.locations[index].root, server_conf.cgi, request);
 			return ;
 		}

@@ -27,6 +27,9 @@
 # include <algorithm>
 # include <string>
 # include <sys/wait.h>
+# include <sys/stat.h>
+# include <sys/types.h>
+# include <dirent.h>
 # include <cstring>
 # include "ServerManager.hpp"
 # include "ConfigParser.hpp"

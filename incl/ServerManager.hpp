@@ -25,6 +25,7 @@ class ServerManager{
 		
 
 		int server_fd;
+		int _location;
 		int fd_read[2];
 		int fd_write[2];
 		int file_to_get;
@@ -49,6 +50,7 @@ class ServerManager{
 		std::vector<int> getFdCgiOut();
 		void readCgi(int pipe);
 		void writePOST(int fd);
+		void getDir(std::string path, std::string uri);
 
 		void handle_request(std::string const request, ConfigParser::Server server_conf);
 

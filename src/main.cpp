@@ -72,8 +72,7 @@ int create_socket(int port, std::string host){
 	return socketfd;
 }
 
-void setSocketLinger(int socket_df)
-{
+void setSocketLinger(int socket_df) {
 	struct linger sl;
 	sl.l_onoff = 1;
 	sl.l_linger = 0;
@@ -122,7 +121,6 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
                 servers[i].removeClient(fd.fd);
                 std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
                 close(fd.fd);
-
                 std::vector<struct pollfd>::iterator it = fds.begin() + *index;
                 fds.erase(it);
             }
@@ -149,11 +147,15 @@ void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::
 }
 
 int main(int argc, char *argv[]) {
-	if (argc != 2){
+	if (argc > 2){
 		std::cerr << "Error: Invalid number of arguments (Only 1 config file needed)";
 		return 1;
 	}
-	char const* file = argv[1];
+	char const* file;
+	if (argc == 2)
+		file = argv[1];
+	else 
+		file = "conf/server.conf";
 	ConfigParser ConfigFile(file);
 	ConfigFile.addServerConf();
 	std::vector<ConfigParser::Server> servers_conf = ConfigFile.getServers();
