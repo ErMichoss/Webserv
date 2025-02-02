@@ -202,7 +202,7 @@ void ServerManager::getDir(std::string path, std::string uri){
 	}
 	std::string html = "<ul>";
 	while ((read_dir = readdir(dir))){
-		html += "<li><a src='" + uri + "/" + read_dir->d_name + "'>" + read_dir->d_name + "</a></li>";
+		html += "<li><a href='" + uri + "/" + read_dir->d_name + "'>" + read_dir->d_name + "</a></li>";
 	}
 	html += "</ul>";
 	client_response[active_client] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
@@ -215,12 +215,10 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	struct stat statbuf;
 	std::memset(&statbuf, 0, sizeof(statbuf));
 	if (stat(path.c_str(), &statbuf) == -1) {
-		std::cout << "path: " + path << std::endl;
 		readErrorPages(HTTP404, server_conf.error_pages[404], active_client);
 	}
 	if (S_ISDIR(statbuf.st_mode) && !server_conf.locations[_location].index.empty()){
 		path += server_conf.locations[_location].index;
-		std::cout << "path: " + path << std::endl;
 	} else if (S_ISDIR(statbuf.st_mode) && server_conf.locations[_location].autoindex){
 		getDir(path, request_path);
 		return;
@@ -287,6 +285,17 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	client_response[active_client] += body.str();
 }
 
+std::string ServerManager::findDir(std::string path){
+	std::size_t last_bar = path.find_last_of("/");
+	std::string dir = path.substr(last_bar);
+	if (findExtension(dir) == "")
+		return dir;
+	else {
+		dir = path.substr(0, last_bar);
+		return dir;
+	}
+}
+
 void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
 	std::istringstream req_stream(request);
 	std::string method, path, protocol;
@@ -296,8 +305,10 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 	req_stream >> method >> path >> protocol;
 
 	std::size_t last_bar = path.find_last_of("/");
-	std::string directory_path = path.substr(last_bar);
+	std::string directory_path = findDir(path);
 	std::string file = path.substr(last_bar);
+	if (file == directory_path)
+		file = "";
 
 	for (std::size_t i = 0; i < server_conf.locations.size(); i++) {
 		if (server_conf.locations[i].path == directory_path) {
@@ -310,6 +321,9 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 		server_conf.locations[index].limits.push_back("NONE");
 	}
 	_location = index;
+	if (server_conf.locations[index].root.empty()){
+		server_conf.locations[index].root = server_conf.root;
+	}
 	if (!server_conf.locations[index].redirect_target.empty()) {
 		std::map<int, std::string>::iterator it = server_conf.locations[index].redirect_target.begin();
 		int code = it->first;

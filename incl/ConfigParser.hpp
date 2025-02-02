@@ -23,9 +23,9 @@ class ConfigParser{
         	std::map<int, std::string> redirect_target;
 			std::vector<std::string> limits;
 
-			Location(const std::string& p = "/", const std::string& r = "",
+			Location(const std::string& p = "/",
              bool a = false)
-        	: path(p), root(r), autoindex(a) {}
+        	: path(p), autoindex(a) {}
     	};
 
     	struct Server {

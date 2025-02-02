@@ -50,12 +50,12 @@ class ServerManager{
 		std::vector<int> getFdCgiOut();
 		void readCgi(int pipe);
 		void writePOST(int fd);
-		void getDir(std::string path, std::string uri);
-
 		void handle_request(std::string const request, ConfigParser::Server server_conf);
 
 	private:
 		//Private Methods
+		void getDir(std::string path, std::string uri);
+		std::string findDir(std::string path);
 		int	checkLimits(std::vector<std::string> limits, std::string search) const;
 		void getFile(std::string request_path, std::string server_root, std::string cgi, std::string request);
 		void handlePost(std::string request, std::string request_path, std::string server_root);
