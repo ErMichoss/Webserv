@@ -16,6 +16,8 @@ class ServerManager{
 		std::vector<int> fdcgi_out;
 		std::map<int, bool> stopped_value;
 		std::map<int, int> pipe_client;
+		std::map<int, std::size_t> w_size;
+		std::map<int, bool> end_write;
 		
 	private:
 		//Atributes

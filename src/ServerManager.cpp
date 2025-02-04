@@ -45,10 +45,16 @@ void ServerManager::readErrorPages(std::string header, std::string body, int cli
 }
 
 void ServerManager::writePOST(int fd){
-	send(fd, to_write[fd].c_str(), to_write[fd].size(), 0);
-	fdcgi_in.push_back(fd);
-	std::vector<int>::iterator it = std::remove(fdcgi_out.begin(), fdcgi_out.end(), fd);
-	fdcgi_out.erase(it, fdcgi_out.end());
+	std::size_t bytes_send = send(fd, to_write[fd].c_str(), to_write[fd].size(), 0);
+	if (bytes_send == w_size[fd]){
+		std::cout << bytes_send << " " << w_size[fd] << std::endl;
+		fdcgi_in.push_back(fd);
+		std::vector<int>::iterator it = std::remove(fdcgi_out.begin(), fdcgi_out.end(), fd);
+		fdcgi_out.erase(it, fdcgi_out.end());
+		end_write[fd] = true;
+	} else {
+		w_size[fd] -= bytes_send;
+	}
 }
 
 void ServerManager::readCgi(int pipe) {
@@ -121,78 +127,6 @@ void ServerManager::handle_delete(std::string root, std::string request) {
 	}
 }
 
-void ServerManager::handlePostUpload(std::string request, std::string server_root) {
-    std::size_t header_end = request.find("\r\n\r\n");
-    if (header_end == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-
-    std::string headers = request.substr(0, header_end);
-    std::size_t content_length_pos = headers.find("Content-Length: ");
-    if (content_length_pos == std::string::npos) {
-        readErrorPages(HTTP411, server_conf.error_pages[411], active_client);
-		return ;
-    }
-
-    std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
-    if (content_type_pos == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[415], active_client);
-		return ;
-    }
-    std::string boundary_prefix = "boundary=";
-    std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
-    if (boundary_pos == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    std::string boundary = headers.substr(boundary_pos + boundary_prefix.size());
-    boundary = "--" + boundary.substr(0, boundary.find("\r\n"));
-
-    std::string body = request.substr(header_end + 4);
-    std::size_t file_start = body.find(boundary);
-    if (file_start == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    file_start += boundary.size() + 2;
-
-    std::size_t file_end = body.find(boundary, file_start);
-    if (file_end == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    std::string file_content = body.substr(file_start, file_end - file_start);
-
-    std::size_t filename_pos = file_content.find("filename=\"");
-    if (filename_pos == std::string::npos) {
-		std::cout << "no hay filename" << std::endl;
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    std::string filename = file_content.substr(filename_pos + 10);
-    filename = filename.substr(0, filename.find("\""));
-
-    std::size_t data_start = file_content.find("\r\n\r\n");
-    if (data_start == std::string::npos) {
-        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return ;
-    }
-    data_start += 4;
-    std::string file_data = file_content.substr(data_start);
-
-    std::string file_path = server_root + "/" + filename;
-    int fd = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
-    if (fd < 0) {
-        readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
-		return ;
-    }
-    write(fd, file_data.c_str(), file_data.size());
-    close(fd);
-
-	client_response[active_client] = "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\nContent-Length: 35\r\n\r\n<h1>File Uploaded Successfully</h1>";
-}
-
 void ServerManager::handlePost(std::string request, std::string request_path, std::string server_root){
 	std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
@@ -242,13 +176,15 @@ if (pid == -1) {
     readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
     return;
 }
-
+std::cout << request_path << std::endl;
 if (pid == 0) {
     dup2(pipes[0], STDOUT_FILENO);
     dup2(pipes[0], STDIN_FILENO); 
     close(pipes[0]);
     close(pipes[1]);
 
+	chdir(server_conf.locations[_location].root.c_str());
+	
     std::string command = "/usr/bin/php-cgi";
 
     char *const args[] = {const_cast<char *>(command.c_str()), const_cast<char *>(request_path.c_str()), NULL};
@@ -260,6 +196,8 @@ if (pid == 0) {
     fdcgi_out.push_back(pipes[1]);
 	pipe_client[pipes[1]] = active_client;
 	to_write[pipes[1]] = body;
+	w_size[pipes[1]] = body.size();
+	end_write[pipes[1]] = false;
 	stopped_value[active_client] = true;
 }
 return;
@@ -361,13 +299,16 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 
 std::string ServerManager::findDir(std::string path){
 	std::size_t last_bar = path.find_last_of("/");
-	std::string dir = path.substr(last_bar);
-	if (findExtension(dir) == "")
-		return dir;
-	else {
-		dir = path.substr(0, last_bar);
-		return dir;
+	if (last_bar != std::string::npos){
+		std::string dir = path.substr(last_bar);
+		if (findExtension(dir) == "")
+			return dir;
+		else {
+			dir = path.substr(0, last_bar);
+			return dir;
+		}
 	}
+	return "";
 }
 
 bool ServerManager::checkBodySize(std::string content_length){
@@ -387,11 +328,15 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 
 	req_stream >> method >> path >> protocol;
 
+	std::string directory_path = "";
+	std::string file = "";
 	std::size_t last_bar = path.find_last_of("/");
-	std::string directory_path = findDir(path);
-	std::string file = path.substr(last_bar);
-	if (file == directory_path)
-		file = "";
+	if (last_bar != std::string::npos){
+		directory_path = findDir(path);
+		file = path.substr(last_bar);
+		if (file == directory_path)
+			file = "";
+	}
 
 	for (std::size_t i = 0; i < server_conf.locations.size(); i++) {
 		if (server_conf.locations[i].path == directory_path) {
@@ -424,10 +369,6 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 		return ;
 	} else if (method == "POST") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "POST")) {
-			if (path == "/upload") {
-				handlePostUpload(request, server_conf.locations[index].root);
-				return ;
-			}
 			handlePost(request, path, server_conf.locations[index].root);
 			return ;
 		}

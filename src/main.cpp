@@ -108,7 +108,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
         } else if (!servers[i].clients.empty() && std::find(servers[i].getClients().begin(), servers[i].getClients().end(), fd.fd) != servers[i].getClients().end()) {
             char buffer[BUFFER_SIZE];
             std::memset(buffer, 0, sizeof(buffer));
-            ssize_t bytes = read(fd.fd, buffer, sizeof(buffer));
+            ssize_t bytes = read(fd.fd, buffer, sizeof(buffer) -1);
             if (bytes > 0) {
                 ConfigParser::Server server_conf = servers[i].getServerName(std::string(buffer, bytes));
                 servers[i].server_conf = server_conf;
@@ -138,7 +138,10 @@ void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::
         } else if (std::find(servers[i].fdcgi_out.begin(),servers[i].fdcgi_out.end(), fd.fd) != servers[i].fdcgi_out.end()) {
 			std::cout << "Event: Entra a escribir en Pipe" << std::endl;
 			servers[i].writePOST(fd.fd);
-			fds[*index].events = POLLIN;
+			if (servers[i].end_write[fd.fd]) {
+				std::cout << "Termina de Escribir" << std::endl;
+				fds[*index].events = POLLIN;
+			}
 			std::cout << "Event: Sale de escribir en Pipe" << std::endl;
 			return;
         }
@@ -156,7 +159,9 @@ int main(int argc, char *argv[]) {
 	else 
 		file = "conf/server.conf";
 	ConfigParser ConfigFile(file);
-	ConfigFile.addServerConf();
+	if (ConfigFile.addServerConf() == 1){
+		exit(1);
+	}
 	std::vector<ConfigParser::Server> servers_conf = ConfigFile.getServers();
 	std::vector<ServerManager> servers = std::vector<ServerManager>();
 
@@ -171,7 +176,7 @@ int main(int argc, char *argv[]) {
 				ServerManager server(servers_conf[i], socketfd);
 				servers.push_back(server);
 			} 
-			else { std::cerr << "No se pudo crear el socket para " << servers_conf[i].host << ":" << servers_conf[i].port << std::endl; }
+			else { std::cerr << "No se pudo crear el socket para " << servers_conf[i].host << ":" << servers_conf[i].port << std::endl; exit(1);}
 		} else {
 			servers[index].addConf(servers_conf[i]);
 		}
