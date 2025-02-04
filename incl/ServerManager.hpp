@@ -31,6 +31,7 @@ class ServerManager{
 		int file_to_get;
 		int fd_upload;
 		std::string response;
+		std::map<int, bool> valid_body;
 
 	public:
 		//Public Methods
@@ -55,6 +56,7 @@ class ServerManager{
 	private:
 		//Private Methods
 		void getDir(std::string path, std::string uri);
+		bool checkBodySize(std::string content_length);
 		std::string findDir(std::string path);
 		int	checkLimits(std::vector<std::string> limits, std::string search) const;
 		void getFile(std::string request_path, std::string server_root, std::string cgi, std::string request);

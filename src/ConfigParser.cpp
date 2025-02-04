@@ -135,6 +135,19 @@ int ConfigParser::extractServerConf(Server& server, std::string line){
 
 			if (root.empty()) return 1;
 			else server.root = root;
+		} else if (line.substr(0, 9) == "body_size") {
+			std::string body;
+
+			if (this->checkColon(9, line)) return 1;
+			
+			body = line.substr(10);
+			this->trim(body);
+			if (!this->checkAllDigit(body)){
+				std::cerr << "Error: Non-numeric value on 'body_size' configuration" << body << std::endl;
+				return 1;
+			}
+
+			server.body_size = atoi(body.c_str());
 		} else if (line.substr(0, 3) == "cgi"){
 			std::string cgi = this->exctractString(3, line);
 

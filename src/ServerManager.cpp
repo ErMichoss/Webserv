@@ -58,10 +58,8 @@ void ServerManager::readCgi(int pipe) {
 
 	std::size_t bytes_read = 0;
 	bytes_read = read(pipe, buffer, sizeof(buffer));
-	std::cout << bytes_read << std::endl;
 	if (bytes_read < sizeof(buffer)){
 		client_response[pipe].append(buffer, bytes_read);
-		std::cout << "Termina de leer" << std::endl;
 		close(pipe);
 		std::size_t header_end = client_response[pipe].find("\r\n\r\n");
 		if (header_end == std::string::npos) {
@@ -75,10 +73,13 @@ void ServerManager::readCgi(int pipe) {
 		client_response[client_id] += client_response[pipe];
 		client_response[pipe].erase();
 		stopped_value[client_id] = false;
+		if (!valid_body[client_id]){
+			readErrorPages(HTTP413, server_conf.error_pages[413], client_id);
+			return ;
+		}
 	} else if (bytes_read > 0) {
 		client_response[pipe].append(buffer, bytes_read);
 	} else {
-		std::cout << "Termina de leer" << std::endl;
 		close(pipe);
 		std::size_t header_end = client_response[pipe].find("\r\n\r\n");
 		if (header_end == std::string::npos) {
@@ -120,6 +121,77 @@ void ServerManager::handle_delete(std::string root, std::string request) {
 	}
 }
 
+void ServerManager::handlePostUpload(std::string request, std::string server_root) {
+    std::size_t header_end = request.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
+		return ;
+    }
+
+    std::string headers = request.substr(0, header_end);
+    std::size_t content_length_pos = headers.find("Content-Length: ");
+    if (content_length_pos == std::string::npos) {
+        readErrorPages(HTTP411, server_conf.error_pages[411], active_client);
+		return ;
+    }
+
+    std::size_t content_type_pos = headers.find("Content-Type: multipart/form-data;");
+    if (content_type_pos == std::string::npos) {
+        readErrorPages(HTTP400, server_conf.error_pages[415], active_client);
+		return ;
+    }
+    std::string boundary_prefix = "boundary=";
+    std::size_t boundary_pos = headers.find(boundary_prefix, content_type_pos);
+    if (boundary_pos == std::string::npos) {
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
+		return ;
+    }
+    std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
+    boundary = boundary.substr(0, boundary.find("\r\n"));
+
+    std::string body = request.substr(header_end + 4);
+    std::size_t file_start = body.find(boundary);
+    if (file_start == std::string::npos) {
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
+		return ;
+    }
+    file_start += boundary.size() + 2;
+
+    std::size_t file_end = body.find(boundary, file_start);
+    if (file_end == std::string::npos) {
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
+		return ;
+    }
+    std::string file_content = body.substr(file_start, file_end - file_start);
+
+    std::size_t filename_pos = file_content.find("filename=\"");
+    if (filename_pos == std::string::npos) {
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
+		return ;
+    }
+    std::string filename = file_content.substr(filename_pos + 10);
+    filename = filename.substr(0, filename.find("\""));
+
+    std::size_t data_start = file_content.find("\r\n\r\n");
+    if (data_start == std::string::npos) {
+        readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
+		return ;
+    }
+    data_start += 4;
+    std::string file_data = file_content.substr(data_start);
+
+    std::string file_path = server_root + "/" + filename;
+    int fd = open(file_path.c_str(), O_CREAT | O_WRONLY, 0666);
+    if (fd < 0) {
+        readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
+		return ;
+    }
+    write(fd, file_data.c_str(), file_data.size());
+    close(fd);
+
+	client_response[active_client] = "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\n\r\n<h1>File Uploaded Successfully</h1>";
+}
+
 void ServerManager::handlePost(std::string request, std::string request_path, std::string server_root){
 	std::size_t header_end = request.find("\r\n\r\n");
     if (header_end == std::string::npos) {
@@ -138,6 +210,7 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
     if (content_length_end != std::string::npos) {
         content_length = content_length.substr(0, content_length_end);
     }
+	this->valid_body[active_client] = checkBodySize(content_length);
     std::size_t content_type_pos = headers.find("Content-Type: ");
     if (content_type_pos == std::string::npos) {
         readErrorPages(HTTP415, server_conf.error_pages[415], active_client);
@@ -296,6 +369,15 @@ std::string ServerManager::findDir(std::string path){
 	}
 }
 
+bool ServerManager::checkBodySize(std::string content_length){
+	if (server_conf.body_size == -1)
+		return true;
+	if (server_conf.body_size < atoi(content_length.c_str())){
+		return false;
+	}
+	return true;
+}
+
 void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
 	std::istringstream req_stream(request);
 	std::string method, path, protocol;
@@ -324,6 +406,7 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 	if (server_conf.locations[index].root.empty()){
 		server_conf.locations[index].root = server_conf.root;
 	}
+	this->valid_body[active_client] = true;
 	if (!server_conf.locations[index].redirect_target.empty()) {
 		std::map<int, std::string>::iterator it = server_conf.locations[index].redirect_target.begin();
 		int code = it->first;
@@ -340,6 +423,10 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 		return ;
 	} else if (method == "POST") {
 		if (server_conf.locations[index].limits[0] == "NONE" || !this->checkLimits(server_conf.locations[index].limits, "POST")) {
+			if (path == "/upload") {
+				handlePostUpload(request, server_conf.locations[index].root);
+				return ;
+			}
 			handlePost(request, path, server_conf.locations[index].root);
 			return ;
 		}

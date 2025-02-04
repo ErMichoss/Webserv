@@ -100,7 +100,6 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
 			std::cout << "Event: Pipe Reads" << std::endl;
             servers[i].readCgi(fd.fd);
 			if (servers[i].stopped_value[servers[i].pipe_client[fd.fd]] == false){
-				std::cout << "borra el pipe " << *index << std::endl;
 				std::vector<struct pollfd>::iterator ss = fds.begin() + *index;
                 fds.erase(ss);
 			}
