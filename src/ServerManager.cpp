@@ -146,8 +146,8 @@ void ServerManager::handlePostUpload(std::string request, std::string server_roo
         readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
 		return ;
     }
-    std::string boundary = "--" + headers.substr(boundary_pos + boundary_prefix.size());
-    boundary = boundary.substr(0, boundary.find("\r\n"));
+    std::string boundary = headers.substr(boundary_pos + boundary_prefix.size());
+    boundary = "--" + boundary.substr(0, boundary.find("\r\n"));
 
     std::string body = request.substr(header_end + 4);
     std::size_t file_start = body.find(boundary);
@@ -166,6 +166,7 @@ void ServerManager::handlePostUpload(std::string request, std::string server_roo
 
     std::size_t filename_pos = file_content.find("filename=\"");
     if (filename_pos == std::string::npos) {
+		std::cout << "no hay filename" << std::endl;
         readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
 		return ;
     }
@@ -189,7 +190,7 @@ void ServerManager::handlePostUpload(std::string request, std::string server_roo
     write(fd, file_data.c_str(), file_data.size());
     close(fd);
 
-	client_response[active_client] = "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\n\r\n<h1>File Uploaded Successfully</h1>";
+	client_response[active_client] = "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\nContent-Length: 35\r\n\r\n<h1>File Uploaded Successfully</h1>";
 }
 
 void ServerManager::handlePost(std::string request, std::string request_path, std::string server_root){
