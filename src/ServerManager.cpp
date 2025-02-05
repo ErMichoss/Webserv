@@ -46,8 +46,13 @@ void ServerManager::readErrorPages(std::string header, std::string body, int cli
 
 void ServerManager::writePOST(int fd){
 	std::size_t bytes_send = send(fd, to_write[fd].c_str(), to_write[fd].size(), 0);
+<<<<<<< HEAD
 	std::cout << bytes_send << " " << w_size[fd] << std::endl;
 	if (bytes_send == w_size[fd]){
+=======
+	if (bytes_send == w_size[fd]){
+		std::cout << bytes_send << " " << w_size[fd] << std::endl;
+>>>>>>> newserv
 		fdcgi_in.push_back(fd);
 		std::vector<int>::iterator it = std::remove(fdcgi_out.begin(), fdcgi_out.end(), fd);
 		fdcgi_out.erase(it, fdcgi_out.end());
@@ -163,14 +168,21 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
     setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
     setenv("REDIRECT_STATUS", "1", 1);
 	std::string body = request.substr(header_end + 4);
+<<<<<<< HEAD
 	std::cout << request << std::endl;
 	setenv("CONTENT_LENGTH", content_length.c_str() , 1);
 	std::cout << content_length << " " << body.size() << std::endl;
+=======
+	std::cout << request << std::endl;
+	setenv("CONTENT_LENGTH", content_length.c_str() , 1);
+	std::cout << content_length << " " << body.size() << std::endl;
+>>>>>>> newserv
 
 	int pipes[2];
 if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1) {
     readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
     return;
+<<<<<<< HEAD
 }
 //std::cout << request << std::endl;
 pid_t pid = fork();
@@ -209,6 +221,46 @@ void ServerManager::getDir(std::string path, std::string uri){
 	struct dirent *read_dir;
 	DIR* dir = opendir(path.c_str());
 
+=======
+}
+//std::cout << request << std::endl;
+pid_t pid = fork();
+if (pid == -1) {
+    readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
+    return;
+}
+if (pid == 0) {
+    dup2(pipes[0], STDOUT_FILENO);
+    dup2(pipes[0], STDIN_FILENO); 
+    close(pipes[0]);
+    close(pipes[1]);
+
+	chdir(server_conf.locations[_location].root.c_str());
+	
+    std::string command = "/usr/bin/php-cgi";
+
+    char *const args[] = {const_cast<char *>(command.c_str()), const_cast<char *>(request_path.c_str()), NULL};
+    execve(args[0], args, environ);
+    exit(1);
+} else {
+    struct pollfd socket = { pipes[1], POLLOUT, 0 };
+    fds.push_back(socket);
+    fdcgi_out.push_back(pipes[1]);
+	pipe_client[pipes[1]] = active_client;
+	to_write[pipes[1]] = body;
+	w_size[pipes[1]] = body.size();
+	end_write[pipes[1]] = false;
+	stopped_value[active_client] = true;
+}
+return;
+
+}
+
+void ServerManager::getDir(std::string path, std::string uri){
+	struct dirent *read_dir;
+	DIR* dir = opendir(path.c_str());
+
+>>>>>>> newserv
 	if (dir == NULL){
 		readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
 		return;
@@ -326,6 +378,10 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 	std::string method, path, protocol;
 	std::size_t index = 0;
 	client_response[active_client] = "";
+<<<<<<< HEAD
+	//std::cout << request << std::endl;
+=======
+>>>>>>> newserv
 	//std::cout << request << std::endl;
 
 	req_stream >> method >> path >> protocol;
