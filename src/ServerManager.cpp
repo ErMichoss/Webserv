@@ -163,7 +163,7 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
     setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
     setenv("REDIRECT_STATUS", "1", 1);
 	std::string body = request.substr(header_end + 4);
-	std::cout << body << std::endl;
+	std::cout << request << std::endl;
 	setenv("CONTENT_LENGTH", content_length.c_str() , 1);
 	std::cout << content_length << " " << body.size() << std::endl;
 
