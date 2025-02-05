@@ -107,16 +107,21 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
 			return;
         } else if (!servers[i].clients.empty() && std::find(servers[i].getClients().begin(), servers[i].getClients().end(), fd.fd) != servers[i].getClients().end()) {
             char buffer[BUFFER_SIZE];
-            std::memset(buffer, 0, sizeof(buffer));
-            ssize_t bytes = read(fd.fd, buffer, sizeof(buffer) -1);
-            if (bytes > 0) {
-                ConfigParser::Server server_conf = servers[i].getServerName(std::string(buffer, bytes));
-                servers[i].server_conf = server_conf;
-                servers[i].setActiveClient(fd.fd);
-                servers[i].handle_request(std::string(buffer, bytes), server_conf);
-				std::cout << "Client handeled: " << fd.fd << std::endl;
-                fds[*index].events = POLLOUT;
-            } else {
+            //std::memset(buffer, 0, sizeof(buffer));
+			std::size_t bytes = read(fd.fd, buffer, sizeof(buffer) -1);
+			std::string request;
+			std::cout << sizeof(buffer) << " " << bytes << std::endl;
+			if (bytes > 0) {
+                request.append(buffer, bytes);
+				if (bytes < sizeof(buffer)){
+					ConfigParser::Server server_conf = servers[i].getServerName(request);
+					servers[i].server_conf = server_conf;
+					servers[i].setActiveClient(fd.fd);
+					servers[i].handle_request(request, server_conf);
+					std::cout << "Client handeled: " << fd.fd << std::endl;
+					fds[*index].events = POLLOUT;
+				}
+			} else {
                 servers[i].removeClient(fd.fd);
                 std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
                 close(fd.fd);
