@@ -23,15 +23,16 @@ class ConfigParser{
         	std::map<int, std::string> redirect_target;
 			std::vector<std::string> limits;
 
-			Location(const std::string& p = "/", const std::string& r = "", const std::string& i = "index.html",
+			Location(const std::string& p = "/",
              bool a = false)
-        	: path(p), root(r), index(i), autoindex(a) {}
+        	: path(p), autoindex(a) {}
     	};
 
     	struct Server {
         	int port;
     		std::string host;
     		std::string server_name;
+			int body_size;
     		std::string root;
 			std::string cgi;
 			std::map<int, std::string> error_pages;
@@ -39,8 +40,8 @@ class ConfigParser{
 
 			
 			Server(int p = 80, const std::string& h = "127.0.0.1", const std::string& sn = "", const std::string& r = "/var/www/html",
-           const std::vector<Location>& locs = std::vector<Location>())
-        	: port(p), host(h), server_name(sn), root(r), locations(locs) {
+           const std::vector<Location>& locs = std::vector<Location>(), int body = -1)
+        	: port(p), host(h), server_name(sn), body_size(body), root(r), locations(locs) {
 				error_pages[400] = "<h1>400 Bad Request</h1><p>Your request is malformed or cannot be processed.</p>";
 				error_pages[401] = "<h1>401 Unauthorized</h1><p>You must authenticate to access this resource.</p>";
 				error_pages[402] = "<h1>402 Payment Required</h1><p>Payment is required to proceed.</p>";

@@ -3,6 +3,8 @@
 #include "ServerManager.hpp"
 #include <functional>
 
+bool running = true;
+std::vector<struct pollfd> fds;
 /**
  * @brief Creates a socket for a port and host of your choice.
  * 
@@ -70,8 +72,7 @@ int create_socket(int port, std::string host){
 	return socketfd;
 }
 
-void setSocketLinger(int socket_df)
-{
+void setSocketLinger(int socket_df) {
 	struct linger sl;
 	sl.l_onoff = 1;
 	sl.l_linger = 0;
@@ -80,21 +81,94 @@ void setSocketLinger(int socket_df)
     	perror("setsockopt(SO_LINGER) failed");
 }
 
-int main(int argc, char *argv[]){
-	if (argc != 2){
+void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::size_t* index) {
+    for (std::size_t i = 0; i < servers.size(); i++) {
+        if (fd.fd == servers[i].getServerFd()) {
+            struct sockaddr_in client;
+            socklen_t client_len = sizeof(client);
+            int client_fd = accept(servers[i].getServerFd(), (struct sockaddr*)&client, &client_len);
+            if (client_fd >= 0) {
+                struct pollfd poll_client = { client_fd, POLLIN, 0 };
+                fds.push_back(poll_client);
+                servers[i].addClient(client_fd);
+				std::cout << "Event: Client connected: " << client_fd << std::endl;
+            } else {
+                std::cerr << "Error: Client could not connect" << std::endl;
+            }
+			return ;
+        } else if (!servers[i].fdcgi_in.empty() && std::find(servers[i].fdcgi_in.begin(), servers[i].fdcgi_in.end(), fd.fd) != servers[i].fdcgi_in.end()) {
+			std::cout << "Event: Pipe Reads" << std::endl;
+            servers[i].readCgi(fd.fd);
+			if (servers[i].stopped_value[servers[i].pipe_client[fd.fd]] == false){
+				std::vector<struct pollfd>::iterator ss = fds.begin() + *index;
+                fds.erase(ss);
+			}
+			std::cout << "Event: Exits Pipe Reads" << std::endl;
+			return;
+        } else if (!servers[i].clients.empty() && std::find(servers[i].getClients().begin(), servers[i].getClients().end(), fd.fd) != servers[i].getClients().end()) {
+            char buffer[BUFFER_SIZE];
+            std::memset(buffer, 0, sizeof(buffer));
+            ssize_t bytes = read(fd.fd, buffer, sizeof(buffer) -1);
+            if (bytes > 0) {
+                ConfigParser::Server server_conf = servers[i].getServerName(std::string(buffer, bytes));
+                servers[i].server_conf = server_conf;
+                servers[i].setActiveClient(fd.fd);
+                servers[i].handle_request(std::string(buffer, bytes), server_conf);
+				std::cout << "Client handeled: " << fd.fd << std::endl;
+                fds[*index].events = POLLOUT;
+            } else {
+                servers[i].removeClient(fd.fd);
+                std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
+                close(fd.fd);
+                std::vector<struct pollfd>::iterator it = fds.begin() + *index;
+                fds.erase(it);
+            }
+			return;
+		}
+    }
+}
+
+void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::size_t* index) {
+    for (std::size_t i = 0; i < servers.size(); i++) {
+        if (std::find(servers[i].clients.begin(), servers[i].clients.end(), fd.fd) != servers[i].clients.end() && servers[i].stopped_value[fd.fd] == false) {
+            send(fd.fd, servers[i].client_response[fd.fd].c_str(), servers[i].client_response[fd.fd].size(), 0);
+			std::cout << "Event: Response sended: " << fd.fd << std::endl;
+			fds[*index].events = POLLIN;
+			return;
+        } else if (std::find(servers[i].fdcgi_out.begin(),servers[i].fdcgi_out.end(), fd.fd) != servers[i].fdcgi_out.end()) {
+			std::cout << "Event: Entra a escribir en Pipe" << std::endl;
+			servers[i].writePOST(fd.fd);
+			if (servers[i].end_write[fd.fd]) {
+				std::cout << "Termina de Escribir" << std::endl;
+				fds[*index].events = POLLIN;
+			}
+			std::cout << "Event: Sale de escribir en Pipe" << std::endl;
+			return;
+        }
+    }
+}
+
+int main(int argc, char *argv[]) {
+	if (argc > 2){
 		std::cerr << "Error: Invalid number of arguments (Only 1 config file needed)";
 		return 1;
 	}
-	char const* file = argv[1];
+	char const* file;
+	if (argc == 2)
+		file = argv[1];
+	else 
+		file = "conf/server.conf";
 	ConfigParser ConfigFile(file);
-	ConfigFile.addServerConf();
+	if (ConfigFile.addServerConf() == 1){
+		exit(1);
+	}
 	std::vector<ConfigParser::Server> servers_conf = ConfigFile.getServers();
 	std::vector<ServerManager> servers = std::vector<ServerManager>();
 
 	signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
-	for (size_t i = 0; i < servers_conf.size(); i++){
+	for (std::size_t i = 0; i < servers_conf.size(); i++){
 		int index = hostport_match(servers, servers_conf[i]);
 		if (index == -1){
 			int socketfd = create_socket(servers_conf[i].port, servers_conf[i].host);
@@ -102,91 +176,32 @@ int main(int argc, char *argv[]){
 				ServerManager server(servers_conf[i], socketfd);
 				servers.push_back(server);
 			} 
-			else { std::cerr << "No se pudo crear el socket para " << servers_conf[i].host << ":" << servers_conf[i].port << std::endl; }
+			else { std::cerr << "No se pudo crear el socket para " << servers_conf[i].host << ":" << servers_conf[i].port << std::endl; exit(1);}
 		} else {
 			servers[index].addConf(servers_conf[i]);
 		}
 	}
 
-	std::vector<struct pollfd> fds;
-
-	struct pollfd stdin_pollfd = {STDIN_FILENO, POLLIN, 0};
-	fds.push_back(stdin_pollfd);
-
-	for (size_t i = 0; i < servers.size(); i++){
-		struct pollfd server_pollfd = {servers[i].getServerfd(), POLLIN, 0};
-		fds.push_back(server_pollfd);
+	for (std::size_t i = 0; i < servers.size(); i++){
+		struct pollfd new_poll = { servers[i].getServerFd(), POLLIN, 0 };
+		fds.push_back(new_poll);
 	}
 
-	while (running){
-		std::string prontf;
-
-		int count = poll(&fds[0], fds.size(), -1);
-
-		if (count < 0){
-			std::cerr << "Error en poll: ";
-			perror("poll");
+	while (running) {
+		std::vector<struct pollfd> copia = fds;
+		int count = poll(&copia[0], copia.size(), -1);
+		if (count < 0) {
+			std::cerr << "Error: There was an error in Poll";
 			running = false;
-			break ;
+			break;
 		}
-		for (size_t i = 0; i < fds.size(); i++){
-			if (fds[i].revents & POLLIN){
-				if (fds[i].fd == STDIN_FILENO) {
-					std::getline(std::cin, prontf);
-					if (prontf == "exit"){
-						std::cout << "Exiting server...\n";
-						running = false;
-						break;
-					}
-				} else {
-					for (size_t j = 0; j < servers.size(); j++){
-						if (fds[i].fd == servers[j].getServerfd()){
-							struct sockaddr_in client;
-							socklen_t client_len = sizeof(client);
-							int client_fd = accept(servers[j].getServerfd(), (struct sockaddr*)&client, &client_len);
-							if (client_fd >= 0){
-								struct pollfd poll_client = {client_fd, POLLIN, 0};
-								fds.push_back(poll_client);
-								std::cout << "Cliente conectado: " << client_fd << std::endl;
-							} else {
-								std::cerr << "No se pudo conectar el cliente: " << client_fd << std::endl;
-							}
-							servers[j].addToClients(client_fd);
-						} else if (fds[i].fd == servers[j].checkClients(fds[i].fd)) {
-							char buffer[BUFFER_SIZE];
-							std::memset(buffer, 0, sizeof(buffer));
-							ssize_t bytes = read(fds[i].fd, buffer, sizeof(buffer));
-							if (bytes > 0){
-								ConfigParser::Server server_conf = servers[j].getServerName(std::string(buffer, bytes));
-								std::string const response = servers[j].handle_request(std::string(buffer, bytes), server_conf);
-								send(fds[i].fd, response.c_str(), strlen(response.c_str()), 0);
-								std::cout << "Client disconnected: " << fds[i].fd << std::endl;
-								servers[j].removeClient(fds[i].fd);
-								close(fds[i].fd);
-								fds.erase(fds.begin() + i);
-								--i;
-							} else {
-								servers[j].removeClient(fds[i].fd);
-								std::cout << "Client disconnected: " << fds[i].fd << std::endl;
-								close(fds[i].fd);
-								fds.erase(fds.begin() + i);
-								--i;
-							}
-						}
-					}
-				}
+		for (std::size_t i = 0; i < copia.size(); i++) {
+			if (copia[i].revents & POLLIN) {
+				pollinHandler(copia[i], servers, &i);
+			} else if (copia[i].revents & POLLOUT) {
+				polloutHandler(copia[i], servers, &i);
 			}
 		}
-	}
-
-	for (size_t j = 0; j < fds.size(); j++) {
-		if (fds[j].fd != STDIN_FILENO) {
-			setSocketLinger(fds[j].fd);
-			close(fds[j].fd);
-		}
-    }
-	for (size_t i = 0; i < servers.size(); i++){
-		close(servers[i].getServerfd());
 	}
 
 	return 0;
