@@ -75,6 +75,7 @@ void ServerManager::readCgi(int pipe) {
 			return ;
 		}
 		std::string content = client_response[pipe].substr(header_end + 4);
+		client_response[client_id] += "Date: " + getGmtTime() + "\r\n";
 		client_response[client_id] += "Content-Length: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
 		client_response[client_id] += client_response[pipe];
 		client_response[pipe].erase();
@@ -95,6 +96,7 @@ void ServerManager::readCgi(int pipe) {
 			return ;
 		}
 		std::string content = client_response[pipe].substr(header_end + 4);
+		client_response[client_id] += "Date: " + getGmtTime() + "\r\n";
 		client_response[client_id] += "Content-Length: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
 		client_response[client_id] += client_response[pipe];
 		client_response[pipe].erase();
@@ -166,6 +168,11 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
 	std::cout << request << std::endl;
 	setenv("CONTENT_LENGTH", content_length.c_str() , 1);
 	std::cout << content_length << " " << body.size() << std::endl;
+	if (atoi(content_length.c_str()) != (int)body.size()){
+		readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
+		return;
+	}
+
 
 	int pipes[2];
 if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1) {
@@ -221,6 +228,7 @@ void ServerManager::getDir(std::string path, std::string uri){
 	}
 	html += "</ul>";
 	client_response[active_client] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+	client_response[active_client] += "Date: " + getGmtTime() + "\r\n";
 	client_response[active_client] += "Content-Length: " + ft_itoa(std::strlen(html.c_str())) + "\r\n\r\n";
 	client_response[active_client] += html;
 }
@@ -295,6 +303,7 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	content_length << body.str().size();
 
 	client_response[active_client] = "HTTP/1.1 200 OK\r\n";
+	client_response[active_client] += "Date: " + getGmtTime() + "\r\n";
 	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)) + "\r\n";
 	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n\r\n";
 	client_response[active_client] += body.str();

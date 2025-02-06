@@ -16,6 +16,18 @@ void handle_signal(int signal) {
     }
 }
 
+std::string getGmtTime(){
+	std::time_t rawtime;
+	struct tm* gmt;
+	char date[512];
+
+	time(&rawtime);
+
+	gmt = gmtime(&rawtime);
+	strftime(date, 512, "%a, %d %b %Y %H:%M:%S GMT", gmt);
+	return std::string(date);
+}
+
 int hostport_match(std::vector<ServerManager>& servers, ConfigParser::Server server_conf){
 	int exit = -1;
 	if (servers.size() < 1){
