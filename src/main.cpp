@@ -148,6 +148,17 @@ void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::
     }
 }
 
+void checkFile(std::string file){
+	if (file.length() < 6){
+		std::cerr << "Not a conf file" << std::endl;
+		exit(1);
+	}
+	if (file.substr(file.length() - 5) != ".conf"){
+		std::cerr << "Not a conf file" << std::endl;
+		exit(1);
+	}
+}
+
 int main(int argc, char *argv[]) {
 	if (argc > 2){
 		std::cerr << "Error: Invalid number of arguments (Only 1 config file needed)";
@@ -158,6 +169,7 @@ int main(int argc, char *argv[]) {
 		file = argv[1];
 	else 
 		file = "conf/server.conf";
+	checkFile(file);
 	ConfigParser ConfigFile(file);
 	if (ConfigFile.addServerConf() == 1){
 		exit(1);
