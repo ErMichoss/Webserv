@@ -62,9 +62,9 @@ void ServerManager::readCgi(int pipe) {
 	int client_id = pipe_client[pipe];
 	client_response[client_id] = "HTTP/1.1 200 OK\r\n";
 
-	std::size_t bytes_read = 0;
+	ssize_t bytes_read = 0;
 	bytes_read = read(pipe, buffer, sizeof(buffer));
-	if (bytes_read < sizeof(buffer)){
+	if (bytes_read < (ssize_t)sizeof(buffer) && bytes_read > -1){
 		client_response[pipe].append(buffer, bytes_read);
 		close(pipe);
 		std::size_t header_end = client_response[pipe].find("\r\n\r\n");
@@ -83,7 +83,7 @@ void ServerManager::readCgi(int pipe) {
 			readErrorPages(HTTP413, server_conf.error_pages[413], client_id);
 			return ;
 		}
-	} else if (bytes_read > 0) {
+	} else if (bytes_read > -1) {
 		client_response[pipe].append(buffer, bytes_read);
 	} else {
 		close(pipe);
@@ -246,9 +246,17 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 		setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
 		setenv("REDIRECT_STATUS", "1", 1);
 		size_t start = request.find_first_of('?');
-		size_t end = request.find_first_of(' ', start);
-		std::string quri = request.substr(start, end - start);
-		setenv("QUERY_STRING", quri.c_str(), 1);
+		if (start != std::string::npos){
+			size_t end = request.find_first_of(' ', start);
+			if (end != std::string::npos){
+				std::string quri = request.substr(start, end - start);
+				setenv("QUERY_STRING", quri.c_str(), 1);
+			} else {
+				setenv("QUERY_STRING", "", 1);
+			}
+		} else {
+			setenv("QUERY_STRING", "", 1);
+		}
 
 		int pipes[2];
 		if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1){

@@ -203,11 +203,15 @@ int main(int argc, char *argv[]) {
 		std::vector<struct pollfd> copia = fds;
 		int count = poll(&copia[0], copia.size(), -1);
 		if (count < 0) {
-			std::cerr << "Error: There was an error in Poll";
+			std::cerr << "Error: There was an error in Poll" << std::endl;
 			running = false;
 			break;
 		}
 		for (std::size_t i = 0; i < copia.size(); i++) {
+			for (std::size_t j = 0; j < fds.size(); j++){
+				if (fds[j].fd != 4)
+					std::cout << "fd: " << fds[j].fd << " event: " << fds[j].events << std::endl;
+			}
 			if (copia[i].revents & POLLIN) {
 				pollinHandler(copia[i], servers, &i);
 			} else if (copia[i].revents & POLLOUT) {
