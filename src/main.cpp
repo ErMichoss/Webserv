@@ -100,6 +100,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
 			std::cout << "Event: Pipe Reads" << std::endl;
             servers[i].readCgi(fd.fd);
 			if (servers[i].stopped_value[servers[i].pipe_client[fd.fd]] == false){
+				close(fd.fd);
 				std::vector<struct pollfd>::iterator ss = fds.begin() + *index;
                 fds.erase(ss);
 			}
@@ -115,13 +116,14 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
                 servers[i].setActiveClient(fd.fd);
                 servers[i].handle_request(std::string(buffer, bytes), server_conf);
 				std::cout << "Client handeled: " << fd.fd << std::endl;
+				std::cout << fd.fd << " " << fds[*index].fd << std::endl;
                 fds[*index].events = POLLOUT;
             } else {
                 servers[i].removeClient(fd.fd);
-                std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
-                close(fd.fd);
-                std::vector<struct pollfd>::iterator it = fds.begin() + *index;
-                fds.erase(it);
+				fds[*index].events = POLLERR;
+                /* close(fd.fd);
+                std::vector<struct pollfd>::iterator it = fds.begin() + (*index);
+                fds.erase(it); */
             }
 			return;
 		}
@@ -200,6 +202,14 @@ int main(int argc, char *argv[]) {
 	}
 
 	while (running) {
+		std::vector<struct pollfd>::iterator it = fds.begin();
+		while (it != fds.end()) {
+			if (it->revents & POLLERR) {
+				it = fds.erase(it);
+			} else {
+				++it;
+			}
+		}
 		std::vector<struct pollfd> copia = fds;
 		int count = poll(&copia[0], copia.size(), -1);
 		if (count < 0) {
@@ -208,10 +218,6 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 		for (std::size_t i = 0; i < copia.size(); i++) {
-			for (std::size_t j = 0; j < fds.size(); j++){
-				if (fds[j].fd != 4)
-					std::cout << "fd: " << fds[j].fd << " event: " << fds[j].events << std::endl;
-			}
 			if (copia[i].revents & POLLIN) {
 				pollinHandler(copia[i], servers, &i);
 			} else if (copia[i].revents & POLLOUT) {
