@@ -97,36 +97,30 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
             }
 			return ;
         } else if (!servers[i].fdcgi_in.empty() && std::find(servers[i].fdcgi_in.begin(), servers[i].fdcgi_in.end(), fd.fd) != servers[i].fdcgi_in.end()) {
-			std::cout << "Event: Pipe Reads" << std::endl;
             servers[i].readCgi(fd.fd);
 			if (servers[i].stopped_value[servers[i].pipe_client[fd.fd]] == false){
-				std::vector<struct pollfd>::iterator ss = fds.begin() + *index;
-                fds.erase(ss);
+				fds[*index].events = POLLERR;
 			}
-			std::cout << "Event: Exits Pipe Reads" << std::endl;
 			return;
         } else if (!servers[i].clients.empty() && std::find(servers[i].getClients().begin(), servers[i].getClients().end(), fd.fd) != servers[i].getClients().end()) {
             char buffer[BUFFER_SIZE];
-            //std::memset(buffer, 0, sizeof(buffer));
-			std::size_t bytes = read(fd.fd, buffer, sizeof(buffer) -1);
-			std::string request;
-			std::cout << sizeof(buffer) << " " << bytes << std::endl;
-			if (bytes > 0) {
-                request.append(buffer, bytes);
-				if (bytes < sizeof(buffer)){
-					ConfigParser::Server server_conf = servers[i].getServerName(request);
-					servers[i].server_conf = server_conf;
-					servers[i].setActiveClient(fd.fd);
-					servers[i].handle_request(request, server_conf);
-					std::cout << "Client handeled: " << fd.fd << std::endl;
-					fds[*index].events = POLLOUT;
-				}
-			} else {
+            std::memset(buffer, 0, sizeof(buffer));
+            ssize_t bytes = read(fd.fd, buffer, sizeof(buffer) -1);
+			if (bytes < (ssize_t)sizeof(buffer) && bytes > 0){
+				servers[i].client_request[fd.fd].append(buffer, bytes);
+				ConfigParser::Server server_conf = servers[i].getServerName(servers[i].client_request[fd.fd]);
+                servers[i].server_conf = server_conf;
+                servers[i].setActiveClient(fd.fd);
+                servers[i].handle_request(servers[i].client_request[fd.fd], server_conf);
+				std::cout << "Client handeled: " << fd.fd << std::endl;
+                fds[*index].events = POLLOUT;
+            } else if (bytes > 0) {
+                servers[i].client_request[fd.fd].append(buffer, bytes);
+            } else {
+				std::cout << "Client disconnected: " << fd.fd << std::endl;
                 servers[i].removeClient(fd.fd);
-                std::cout << "Event: Client Disconnected: " << fd.fd << std::endl;
+				fds[*index].events = POLLERR;
                 close(fd.fd);
-                std::vector<struct pollfd>::iterator it = fds.begin() + *index;
-                fds.erase(it);
             }
 			return;
 		}
@@ -141,16 +135,24 @@ void polloutHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::
 			fds[*index].events = POLLIN;
 			return;
         } else if (std::find(servers[i].fdcgi_out.begin(),servers[i].fdcgi_out.end(), fd.fd) != servers[i].fdcgi_out.end()) {
-			std::cout << "Event: Entra a escribir en Pipe" << std::endl;
 			servers[i].writePOST(fd.fd);
 			if (servers[i].end_write[fd.fd]) {
-				std::cout << "Termina de Escribir" << std::endl;
 				fds[*index].events = POLLIN;
 			}
-			std::cout << "Event: Sale de escribir en Pipe" << std::endl;
 			return;
         }
     }
+}
+
+void checkFile(std::string file){
+	if (file.length() < 6){
+		std::cerr << "Not a conf file" << std::endl;
+		exit(1);
+	}
+	if (file.substr(file.length() - 5) != ".conf"){
+		std::cerr << "Not a conf file" << std::endl;
+		exit(1);
+	}
 }
 
 int main(int argc, char *argv[]) {
@@ -163,6 +165,7 @@ int main(int argc, char *argv[]) {
 		file = argv[1];
 	else 
 		file = "conf/server.conf";
+	checkFile(file);
 	ConfigParser ConfigFile(file);
 	if (ConfigFile.addServerConf() == 1){
 		exit(1);
@@ -193,10 +196,18 @@ int main(int argc, char *argv[]) {
 	}
 
 	while (running) {
+		std::vector<struct pollfd>::iterator it = fds.begin();
+		while (it != fds.end()) {
+			if (it->revents & POLLERR) {
+				it = fds.erase(it);
+			} else {
+				++it;
+			}
+		}
 		std::vector<struct pollfd> copia = fds;
 		int count = poll(&copia[0], copia.size(), -1);
 		if (count < 0) {
-			std::cerr << "Error: There was an error in Poll";
+			std::cerr << "Error: There was an error in Poll" << std::endl;
 			running = false;
 			break;
 		}

@@ -46,8 +46,8 @@ void ServerManager::readErrorPages(std::string header, std::string body, int cli
 
 void ServerManager::writePOST(int fd){
 	std::size_t bytes_send = send(fd, to_write[fd].c_str(), to_write[fd].size(), 0);
-	std::cout << bytes_send << " " << w_size[fd] << std::endl;
 	if (bytes_send == w_size[fd]){
+		std::cout << bytes_send << " " << w_size[fd] << std::endl;
 		fdcgi_in.push_back(fd);
 		std::vector<int>::iterator it = std::remove(fdcgi_out.begin(), fdcgi_out.end(), fd);
 		fdcgi_out.erase(it, fdcgi_out.end());
@@ -62,9 +62,9 @@ void ServerManager::readCgi(int pipe) {
 	int client_id = pipe_client[pipe];
 	client_response[client_id] = "HTTP/1.1 200 OK\r\n";
 
-	std::size_t bytes_read = 0;
+	ssize_t bytes_read = 0;
 	bytes_read = read(pipe, buffer, sizeof(buffer));
-	if (bytes_read < sizeof(buffer)){
+	if (bytes_read < (ssize_t)sizeof(buffer) && bytes_read > -1){
 		client_response[pipe].append(buffer, bytes_read);
 		close(pipe);
 		std::size_t header_end = client_response[pipe].find("\r\n\r\n");
@@ -75,7 +75,6 @@ void ServerManager::readCgi(int pipe) {
 			return ;
 		}
 		std::string content = client_response[pipe].substr(header_end + 4);
-		client_response[client_id] += "Date: " + getGmtTime() + "\r\n";
 		client_response[client_id] += "Content-Length: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
 		client_response[client_id] += client_response[pipe];
 		client_response[pipe].erase();
@@ -84,7 +83,7 @@ void ServerManager::readCgi(int pipe) {
 			readErrorPages(HTTP413, server_conf.error_pages[413], client_id);
 			return ;
 		}
-	} else if (bytes_read > 0) {
+	} else if (bytes_read > -1) {
 		client_response[pipe].append(buffer, bytes_read);
 	} else {
 		close(pipe);
@@ -96,7 +95,6 @@ void ServerManager::readCgi(int pipe) {
 			return ;
 		}
 		std::string content = client_response[pipe].substr(header_end + 4);
-		client_response[client_id] += "Date: " + getGmtTime() + "\r\n";
 		client_response[client_id] += "Content-Length: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
 		client_response[client_id] += client_response[pipe];
 		client_response[pipe].erase();
@@ -165,26 +163,20 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
     setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
     setenv("REDIRECT_STATUS", "1", 1);
 	std::string body = request.substr(header_end + 4);
-	std::cout << request << std::endl;
-	setenv("CONTENT_LENGTH", content_length.c_str() , 1);
-	std::cout << content_length << " " << body.size() << std::endl;
-	if (atoi(content_length.c_str()) != (int)body.size()){
-		readErrorPages(HTTP400, server_conf.error_pages[400], active_client);
-		return;
-	}
-
+	setenv("CONTENT_LENGTH", ft_itoa(std::strlen(body.c_str())).c_str() , 1);
 
 	int pipes[2];
 if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1) {
     readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
     return;
 }
-//std::cout << request << std::endl;
+
 pid_t pid = fork();
 if (pid == -1) {
     readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
     return;
 }
+std::cout << request_path << std::endl;
 if (pid == 0) {
     dup2(pipes[0], STDOUT_FILENO);
     dup2(pipes[0], STDIN_FILENO); 
@@ -222,13 +214,10 @@ void ServerManager::getDir(std::string path, std::string uri){
 	}
 	std::string html = "<ul>";
 	while ((read_dir = readdir(dir))){
-		std::string dirname = read_dir->d_name;
-		if (dirname.c_str()[0] != '.' || (dirname.c_str()[0] == '.' && dirname.c_str()[1] == '.' && dirname.size() == 2))
-			html += "<li><a href='" + uri + "/" + read_dir->d_name + "'>" + read_dir->d_name + "</a></li>";
+		html += "<li><a href='" + uri + "/" + read_dir->d_name + "'>" + read_dir->d_name + "</a></li>";
 	}
 	html += "</ul>";
 	client_response[active_client] = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
-	client_response[active_client] += "Date: " + getGmtTime() + "\r\n";
 	client_response[active_client] += "Content-Length: " + ft_itoa(std::strlen(html.c_str())) + "\r\n\r\n";
 	client_response[active_client] += html;
 }
@@ -257,15 +246,24 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 		setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
 		setenv("REDIRECT_STATUS", "1", 1);
 		size_t start = request.find_first_of('?');
-		size_t end = request.find_first_of(' ', start);
-		std::string quri = request.substr(start, end - start);
-		setenv("QUERY_STRING", quri.c_str(), 1);
+		if (start != std::string::npos){
+			size_t end = request.find_first_of(' ', start);
+			if (end != std::string::npos){
+				std::string quri = request.substr(start, end - start);
+				setenv("QUERY_STRING", quri.c_str(), 1);
+			} else {
+				setenv("QUERY_STRING", "", 1);
+			}
+		} else {
+			setenv("QUERY_STRING", "", 1);
+		}
 
 		int pipes[2];
 		if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1){
 			client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
 			return ;
 		}
+		std::cout << pipes[0] << std::endl;
 		pid_t pid = fork();
 		if (pid == -1){
 			client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
@@ -303,7 +301,6 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 	content_length << body.str().size();
 
 	client_response[active_client] = "HTTP/1.1 200 OK\r\n";
-	client_response[active_client] += "Date: " + getGmtTime() + "\r\n";
 	client_response[active_client] += "Content-Type: " + this->getContentType(this->findExtension(path)) + "\r\n";
 	client_response[active_client] += "Content-Length: " + content_length.str() + "\r\n\r\n";
 	client_response[active_client] += body.str();
@@ -337,7 +334,6 @@ void ServerManager::handle_request(std::string const request, ConfigParser::Serv
 	std::string method, path, protocol;
 	std::size_t index = 0;
 	client_response[active_client] = "";
-	//std::cout << request << std::endl;
 
 	req_stream >> method >> path >> protocol;
 

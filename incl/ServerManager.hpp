@@ -18,6 +18,7 @@ class ServerManager{
 		std::map<int, int> pipe_client;
 		std::map<int, std::size_t> w_size;
 		std::map<int, bool> end_write;
+		std::map<int, std::string> client_request;
 		
 	private:
 		//Atributes

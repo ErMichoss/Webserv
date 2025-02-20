@@ -31,7 +31,6 @@
 # include <sys/types.h>
 # include <dirent.h>
 # include <cstring>
-# include <ctime>
 # include "ServerManager.hpp"
 # include "ConfigParser.hpp"
 
@@ -97,8 +96,6 @@ extern std::vector<struct pollfd> fds;
  * @return 0 if the string has something else, 1 if it has only spaces or tabs.
  */
 int onlySpace(std::string str);
-
-std::string getGmtTime();
 
 /**
  * @brief Checks if there is already a socket with that hostport.
