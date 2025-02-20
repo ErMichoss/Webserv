@@ -101,8 +101,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
             servers[i].readCgi(fd.fd);
 			if (servers[i].stopped_value[servers[i].pipe_client[fd.fd]] == false){
 				close(fd.fd);
-				std::vector<struct pollfd>::iterator ss = fds.begin() + *index;
-                fds.erase(ss);
+				fds[*index].events = POLLERR;
 			}
 			std::cout << "Event: Exits Pipe Reads" << std::endl;
 			return;
@@ -121,8 +120,8 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
             } else {
                 servers[i].removeClient(fd.fd);
 				fds[*index].events = POLLERR;
-                /* close(fd.fd);
-                std::vector<struct pollfd>::iterator it = fds.begin() + (*index);
+                close(fd.fd);
+                /*std::vector<struct pollfd>::iterator it = fds.begin() + (*index);
                 fds.erase(it); */
             }
 			return;
@@ -205,6 +204,7 @@ int main(int argc, char *argv[]) {
 		std::vector<struct pollfd>::iterator it = fds.begin();
 		while (it != fds.end()) {
 			if (it->revents & POLLERR) {
+				//close (it->fd);
 				it = fds.erase(it);
 			} else {
 				++it;
