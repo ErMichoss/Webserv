@@ -49,6 +49,8 @@ class ServerManager{
 		void addClient(int fd);
 		std::vector<int> getClients();
 		void removeClient(int fd);
+		void removePipeIn(int fd);
+		void removePipeOut(int fd);
 		void setActiveClient(int fd);
 		std::vector<int> getFdCgiIn();
 		std::vector<int> getFdCgiOut();

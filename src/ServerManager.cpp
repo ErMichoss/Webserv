@@ -36,6 +36,18 @@ void ServerManager::removeClient(int fd) {
 	this->clients.erase(it, this->clients.end());
 }
 
+void ServerManager::removePipeIn(int fd) {
+	std::vector<int>::iterator it = std::remove(this->fdcgi_in.begin(), this->fdcgi_in.end(), fd);
+
+	this->fdcgi_in.erase(it, this->fdcgi_in.end());
+}
+
+void ServerManager::removePipeOut(int fd) {
+	std::vector<int>::iterator it = std::remove(this->fdcgi_out.begin(), this->fdcgi_out.end(), fd);
+
+	this->fdcgi_out.erase(it, this->fdcgi_out.end());
+}
+
 void ServerManager::setActiveClient(int fd) {
 	this->active_client = fd;
 }
@@ -45,16 +57,29 @@ void ServerManager::readErrorPages(std::string header, std::string body, int cli
 }
 
 void ServerManager::writePOST(int fd){
-	std::size_t bytes_send = send(fd, to_write[fd].c_str(), to_write[fd].size(), 0);
-	if (bytes_send == w_size[fd]){
-		std::cout << bytes_send << " " << w_size[fd] << std::endl;
-		fdcgi_in.push_back(fd);
-		std::vector<int>::iterator it = std::remove(fdcgi_out.begin(), fdcgi_out.end(), fd);
-		fdcgi_out.erase(it, fdcgi_out.end());
-		end_write[fd] = true;
-	} else {
-		w_size[fd] -= bytes_send;
-	}
+	ssize_t totalEnviado = 0;
+    ssize_t longitud = w_size[fd];
+
+    while (totalEnviado < longitud) {
+        ssize_t restante = longitud - totalEnviado;
+        ssize_t aEnviar = (restante < BUFFER_SIZE) ? restante : BUFFER_SIZE;
+
+        ssize_t bytesEnviados = send(fd, to_write[fd].c_str() + totalEnviado, aEnviar, 0);
+        if (bytesEnviados == -1) {
+            readErrorPages(HTTP415, server_conf.error_pages[500], active_client);
+			return ;
+        }
+        totalEnviado += bytesEnviados;
+		std::cerr << __FILE__ << ":" << __LINE__ << ": " << totalEnviado << std::endl;
+		std::cerr << __FILE__ << ":" << __LINE__ << ": " << longitud << std::endl;
+		//std::cerr << to_write[fd] << std::endl;
+		//std::cerr << "Lo escrito: " << to_write[fd].substr(totalEnviado, bytesEnviados) << " Ocupa: " << bytesEnviados << std::endl;
+		// int fdf = open("file", O_CREAT | O_RDWR, 0644);
+		// write(fdf, to_write[fd].c_str() + totalEnviado - bytesEnviados , bytesEnviados);
+    }
+	fdcgi_in.push_back(fd);
+	removePipeOut(fd);
+	end_write[fd] = true;
 }
 
 void ServerManager::readCgi(int pipe) {
@@ -71,6 +96,7 @@ void ServerManager::readCgi(int pipe) {
 		if (header_end == std::string::npos) {
 			client_response[pipe].erase();
 			stopped_value[client_id] = false;
+			this->removePipeIn(pipe);
 			readErrorPages(HTTP400, server_conf.error_pages[400], client_id);
 			return ;
 		}
@@ -78,6 +104,7 @@ void ServerManager::readCgi(int pipe) {
 		client_response[client_id] += "Content-Length: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
 		client_response[client_id] += client_response[pipe];
 		client_response[pipe].erase();
+		this->removePipeIn(pipe);
 		stopped_value[client_id] = false;
 		if (!valid_body[client_id]){
 			readErrorPages(HTTP413, server_conf.error_pages[413], client_id);
@@ -89,11 +116,13 @@ void ServerManager::readCgi(int pipe) {
 		close(pipe);
 		std::size_t header_end = client_response[pipe].find("\r\n\r\n");
 		if (header_end == std::string::npos) {
+			this->removePipeIn(pipe);
 			client_response[pipe].erase();
 			stopped_value[client_id] = false;
 			readErrorPages(HTTP400, server_conf.error_pages[400], client_id);
 			return ;
 		}
+		this->removePipeIn(pipe);
 		std::string content = client_response[pipe].substr(header_end + 4);
 		client_response[client_id] += "Content-Length: " + ft_itoa(std::strlen(content.c_str())) + "\r\n";
 		client_response[client_id] += client_response[pipe];
@@ -156,15 +185,16 @@ void ServerManager::handlePost(std::string request, std::string request_path, st
     if (content_type_end != std::string::npos) {
         content_type = content_type.substr(0, content_type_end);
     }
+	//std::cout << request << std::endl;
     setenv("REQUEST_METHOD", "POST", 1);
     setenv("CONTENT_TYPE", content_type.c_str(), 1);
     setenv("SCRIPT_FILENAME", (server_root + request_path).c_str(), 1);
     setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
     setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
-    setenv("REDIRECT_STATUS", "1", 1);
+    setenv("REDIRECT_STATUS", "true", 1);
 	std::string body = request.substr(header_end + 4);
 	setenv("CONTENT_LENGTH", ft_itoa(std::strlen(body.c_str())).c_str() , 1);
-
+	//std::cout << body << std::endl;
 	int pipes[2];
 if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes) == -1) {
     readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
@@ -176,7 +206,6 @@ if (pid == -1) {
     readErrorPages(HTTP500, server_conf.error_pages[500], active_client);
     return;
 }
-std::cout << request_path << std::endl;
 if (pid == 0) {
     dup2(pipes[0], STDOUT_FILENO);
     dup2(pipes[0], STDIN_FILENO); 
@@ -263,7 +292,7 @@ void ServerManager::getFile(std::string request_path, std::string server_root, s
 			client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
 			return ;
 		}
-		std::cout << pipes[0] << std::endl;
+		//std::cout << pipes[0] << std::endl;
 		pid_t pid = fork();
 		if (pid == -1){
 			client_response[active_client] = HTTP500 + this->server_conf.error_pages[500];
@@ -330,7 +359,8 @@ bool ServerManager::checkBodySize(std::string content_length){
 }
 
 void ServerManager::handle_request(std::string const request, ConfigParser::Server server_conf) {
-	std::istringstream req_stream(request);
+	std::string request_copy = request;
+	std::istringstream req_stream(request_copy);
 	std::string method, path, protocol;
 	std::size_t index = 0;
 	client_response[active_client] = "";
