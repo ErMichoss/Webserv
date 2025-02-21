@@ -114,6 +114,7 @@ void pollinHandler(struct pollfd fd, std::vector<ServerManager>& servers, std::s
                 servers[i].handle_request(servers[i].client_request[fd.fd], server_conf);
 				std::cout << "Client handeled: " << fd.fd << std::endl;
                 fds[*index].events = POLLOUT;
+		servers[i].client_request[fd.fd].clear();
             } else if (bytes > 0) {
                 servers[i].client_request[fd.fd].append(buffer, bytes);
             } else {
