@@ -61,6 +61,7 @@ class ServerManager{
 	private:
 		//Private Methods
 		void getDir(std::string path, std::string uri);
+		std::string getFileName(std::string body, std::string boundary);
 		bool checkBodySize(std::string content_length);
 		std::string findDir(std::string path);
 		int	checkLimits(std::vector<std::string> limits, std::string search) const;
